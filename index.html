@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sauvage Cafe — Mexican breakfast in Amsterdam. Bio, locally sourced. Wed–Sun 9:00–15:00.">
+  <title>Sauvage Cafe · Amsterdam</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --white:  #FFFFFF;
+      --black:  #171717;
+      --grey:   #E8E8E8;
+      --mid:    #999999;
+      --accent: #C76020;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      background: var(--white);
+      color: var(--black);
+      font-family: var(--font-body);
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--white);
+      min-height: 100vh;
+    }
+
+    img { display: block; width: 100%; }
+
+    /* NAV */
+    .nav {
+      padding: 16px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid var(--black);
+    }
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      letter-spacing: 0.08em;
+      color: var(--black);
+    }
+    .nav-city {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 0.62rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--mid);
+    }
+
+    /* HERO */
+    .hero {
+      position: relative;
+      height: min(70vh, 480px);
+      overflow: hidden;
+      border-bottom: 1px solid var(--black);
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      transform: scale(1.2) translateY(-8%);
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.08), rgba(0,0,0,0.62));
+    }
+    .hero-text {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 28px 22px;
+    }
+    .hero-eyebrow {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 0.62rem;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(4rem, 14vw, 5.5rem);
+      line-height: 1.0;
+      letter-spacing: 0.02em;
+      color: #ffffff;
+    }
+    .hero-title em { color: var(--accent); font-style: normal; }
+    .hero-tagline {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 0.62rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      margin-top: 20px;
+    }
+
+    /* PHOTO STRIP */
+    .photo-strip {
+      display: flex;
+      gap: 1px;
+      height: 200px;
+      background: var(--grey);
+      border-bottom: 1px solid var(--black);
+    }
+    .photo-strip-item {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    .photo-strip-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+    }
+    .photo-label {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      color: rgba(199, 96, 32, 0.6);
+    }
+
+    /* INFO BAR */
+    .info-bar {
+      padding: 12px 22px;
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      justify-content: center;
+      border-bottom: 1px solid var(--black);
+    }
+    .info-bar span {
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      color: var(--mid);
+    }
+    .info-bar .sep {
+      color: var(--grey);
+      font-family: var(--font-body);
+      font-weight: 300;
+    }
+
+    /* SECTION LABEL */
+    .section-label {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 0.58rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    /* MENU */
+    .menu-section {
+      padding: 24px 22px;
+      border-bottom: 1px solid var(--black);
+    }
+    .menu-title {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 20px;
+    }
+    .menu-list { list-style: none; }
+    .menu-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--grey);
+    }
+    .menu-item:last-child { border-bottom: none; }
+    .menu-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 14px;
+    }
+    .menu-name {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      letter-spacing: 0.04em;
+      color: var(--black);
+    }
+    .menu-desc {
+      font-size: 0.7rem;
+      color: var(--mid);
+      font-weight: 300;
+      line-height: 1.6;
+      letter-spacing: 0.02em;
+    }
+    .menu-price {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      white-space: nowrap;
+      padding-top: 2px;
+    }
+
+    /* DARK BAND */
+    .dark-band {
+      position: relative;
+      height: 56px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--black);
+    }
+    .dark-band img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+    .dark-band-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dark-band-text {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      letter-spacing: 0.3em;
+      color: rgba(255,255,255,0.55);
+    }
+
+    /* TEXT SECTIONS */
+    .text-section {
+      padding: 24px 22px;
+      border-bottom: 1px solid var(--black);
+    }
+    .text-heading {
+      font-family: var(--font-display);
+      font-size: 3.4rem;
+      line-height: 0.9;
+      letter-spacing: 0.02em;
+      color: var(--black);
+      margin-bottom: 14px;
+    }
+    .text-body {
+      font-size: 0.75rem;
+      color: var(--mid);
+      line-height: 1.8;
+      font-weight: 300;
+      letter-spacing: 0.02em;
+    }
+
+    /* SCHEDULE */
+    .schedule-section {
+      padding: 24px 22px;
+      border-bottom: 1px solid var(--black);
+    }
+    .schedule-list { list-style: none; }
+    .schedule-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--grey);
+    }
+    .schedule-row:last-child { border-bottom: none; }
+    .schedule-day {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      color: var(--black);
+    }
+    .schedule-time {
+      font-size: 0.7rem;
+      color: var(--mid);
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+    .schedule-closed {
+      font-size: 0.7rem;
+      color: var(--mid);
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    /* MAP */
+    .map-embed {
+      height: 200px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--black);
+    }
+    .map-embed iframe { width: 100%; height: 100%; display: block; border: 0; }
+
+    .address {
+      padding: 16px 22px 20px;
+      border-bottom: 1px solid var(--black);
+      font-size: 0.72rem;
+      color: var(--mid);
+      font-weight: 300;
+      line-height: 1.75;
+      letter-spacing: 0.03em;
+      font-style: normal;
+    }
+    .address-transport {
+      display: block;
+      margin-top: 5px;
+      font-size: 0.62rem;
+      color: var(--mid);
+      letter-spacing: 0.08em;
+    }
+
+    /* FOOTER */
+    .footer {
+      background: var(--black);
+      padding: 24px 22px 36px;
+    }
+    .footer-logo {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      letter-spacing: 0.1em;
+      color: var(--white);
+      text-decoration: none;
+      margin-bottom: 4px;
+      transition: color 0.15s;
+    }
+    .footer-logo:hover { color: var(--accent); }
+    .footer-sub {
+      font-size: 0.6rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--mid);
+      font-weight: 300;
+      margin-bottom: 20px;
+    }
+    .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+    .footer-link {
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--mid);
+      text-decoration: none;
+      border-bottom: 1px solid #333;
+      padding-bottom: 1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .footer-link:hover { color: var(--white); border-color: var(--white); }
+  </style>
+</head>
+<body>
+
+  <script>
+    const MENU = [
+      {
+        name: "Chilaquiles",
+        price: "€10",
+        desc: "Baked corn tortilla, salsa verde, fried egg, queso fresco, sour cream"
+      },
+      {
+        name: "Breakfast Burrito",
+        price: "€10",
+        desc: "Black beans, rice, scrambled egg, potato, pico de gallo, homemade chipotle mayo"
+      },
+      {
+        name: "Huevos Rancheros",
+        price: "€12",
+        desc: "Softly fried tortilla, sunny side eggs, beans, salsa ranchera, diced onion and coriander"
+      },
+      {
+        name: "Jardín Bowl",
+        price: "€6",
+        desc: "Homemade yogurt and granola, seasonal fruit compote, coconut flakes, honey and mint"
+      }
+    ];
+  </script>
+
+  <div class="page">
+
+    <!-- NAV -->
+    <nav class="nav" aria-label="Main">
+      <span class="nav-logo">Sauvage Cafe</span>
+      <span class="nav-city">Amsterdam</span>
+    </nav>
+
+    <!-- HERO -->
+    <header class="hero">
+      <img class="hero-bg" src="assets/hero-dark.jpg" alt="Sauvage Cafe breakfast burrito">
+      <div class="hero-overlay"></div>
+      <div class="hero-text">
+        <h1 class="hero-title">
+          BUENOS DÍAS,<br>
+          AMSTERDAM<em>.</em>
+        </h1>
+        <p class="hero-tagline">Mexican inspired · Bio · Local</p>
+      </div>
+    </header>
+
+    <!-- PHOTO STRIP -->
+    <div class="photo-strip">
+      <div class="photo-strip-item">
+        <img src="assets/strip-1.jpg" alt="Breakfast Burrito, Amsterdam">
+        <span class="photo-label">Burrito</span>
+      </div>
+      <div class="photo-strip-item">
+        <img src="assets/strip-2.jpg" alt="Chilaquiles">
+        <span class="photo-label">Chilaquiles</span>
+      </div>
+      <div class="photo-strip-item">
+        <img src="assets/strip-3.jpg" alt="Jardín Bowl">
+        <span class="photo-label">Jardín Bowl</span>
+      </div>
+    </div>
+
+    <!-- INFO BAR -->
+    <div class="info-bar">
+      <span>Wed–Sun</span>
+      <span class="sep">·</span>
+      <span>9:00–15:00</span>
+    </div>
+
+    <!-- MENU -->
+    <section class="menu-section">
+      <h2 class="menu-title">Menu</h2>
+      <ul class="menu-list" id="menu-list"></ul>
+    </section>
+
+    <script>
+      function esc(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+      document.getElementById('menu-list').innerHTML = MENU.map(item => `
+        <li class="menu-item">
+          <div class="menu-item-info">
+            <span class="menu-name">${esc(item.name)}</span>
+            <span class="menu-desc">${esc(item.desc)}</span>
+          </div>
+          <span class="menu-price">${esc(item.price)}</span>
+        </li>`).join('');
+    </script>
+
+    <!-- DARK BAND -->
+    <div class="dark-band">
+      <img src="assets/hero-full.jpg" alt="">
+    </div>
+
+    <!-- FOOD ORIGINS -->
+    <section class="text-section">
+      <p class="section-label">Food Origins</p>
+      <h2 class="text-heading">Bio.<br>Local.<br>Real.</h2>
+      <p class="text-body">Every ingredient is sourced with intention. We work with local bio suppliers across the Netherlands — from the eggs to the tortillas. No shortcuts.</p>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section class="schedule-section">
+      <p class="section-label">Hours</p>
+      <ul class="schedule-list">
+        <li class="schedule-row"><span class="schedule-day">Wednesday</span><span class="schedule-time">9:00 — 15:00</span></li>
+        <li class="schedule-row"><span class="schedule-day">Thursday</span><span class="schedule-time">9:00 — 15:00</span></li>
+        <li class="schedule-row"><span class="schedule-day">Friday</span><span class="schedule-time">9:00 — 15:00</span></li>
+        <li class="schedule-row"><span class="schedule-day">Saturday</span><span class="schedule-time">9:00 — 15:00</span></li>
+        <li class="schedule-row"><span class="schedule-day">Sunday</span><span class="schedule-time">9:00 — 15:00</span></li>
+        <li class="schedule-row"><span class="schedule-day">Monday</span><span class="schedule-closed">Closed</span></li>
+        <li class="schedule-row"><span class="schedule-day">Tuesday</span><span class="schedule-closed">Closed</span></li>
+      </ul>
+    </section>
+
+    <!-- THE SPACE -->
+    <section class="text-section">
+      <p class="section-label">The Space</p>
+      <h2 class="text-heading">More than<br>a cafe</h2>
+      <p class="text-body">Sauvage Space is a multi-purpose location in Amsterdam — a coffee bar, a natural wine cave, a photography gallery, and a professional kitchen. Come for breakfast, stay for the vibe.</p>
+    </section>
+
+    <!-- MAP -->
+    <div class="map-embed">
+      <iframe
+        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2436.062873127068!2d4.87037197700413!3d52.36927994737706!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47c609de441caadb%3A0x6121dae32d3058a3!2sPotgieterstraat%2047H%2C%201053%20XS%20Amsterdam!5e0!3m2!1sen!2snl!4v1776076027629!5m2!1sen!2snl"
+        width="100%"
+        height="200"
+        allowfullscreen=""
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        title="Sauvage Space on Google Maps">
+      </iframe>
+    </div>
+
+    <address class="address">
+      Potgieterstraat 47-H<br>
+      Oud-West, Amsterdam<br>
+      <span class="address-transport">Tram 7 · 5 min from Vondelpark</span>
+    </address>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <a href="https://sauvage.amsterdam/" class="footer-logo" target="_blank" rel="noopener noreferrer">Sauvage Space</a>
+      <p class="footer-sub">Amsterdam</p>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="https://www.selectionsauvage.nl" class="footer-link" target="_blank" rel="noopener noreferrer">Wine Cave</a>
+        <a href="https://www.instagram.com/sauvagespace/" class="footer-link" target="_blank" rel="noopener noreferrer">Instagram</a>
+        <a href="https://www.instagram.com/ikinaricoffee/" class="footer-link" target="_blank" rel="noopener noreferrer">Ikinari Coffee</a>
+      </nav>
+    </footer>
+
+  </div>
+
+</body>
+</html>
