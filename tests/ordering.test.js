@@ -314,9 +314,9 @@ test('sendArea: refuses a value outside the three areas', async () => {
 test('checkoutFlow: no area shows the message and does not check out', async () => {
   const { cart, calls } = fakeCart(ITEMS);
   const errs = [];
-  const r = await o.checkoutFlow(cart, undefined, 'attribute', (on) => errs.push(on));
+  const r = await o.checkoutFlow(cart, undefined, 'attribute', (kind) => errs.push(kind));
   assert.equal(r, 'no-area');
-  assert.deepEqual(errs, [true]);
+  assert.deepEqual(errs, ['no-area']);
   assert.equal(calls.length, 0);
   assert.equal(cart.opened, 0);
 });
@@ -324,11 +324,11 @@ test('checkoutFlow: no area shows the message and does not check out', async () 
 test('checkoutFlow: area + transport sends area, then opens checkout', async () => {
   const { cart, calls } = fakeCart(ITEMS);
   const errs = [];
-  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', (on) => errs.push(on));
+  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', (kind) => errs.push(kind));
   assert.equal(r, 'checkout');
   assert.equal(calls.length, 1);
   assert.equal(cart.opened, 1);
-  assert.deepEqual(errs, [false]);
+  assert.deepEqual(errs, [null]);
 });
 
 test('checkoutFlow: no transport configured never opens checkout', async () => {
@@ -341,9 +341,11 @@ test('checkoutFlow: no transport configured never opens checkout', async () => {
 test('checkoutFlow: failed area update never opens checkout', async () => {
   const { cart } = fakeCart(ITEMS);
   cart.props.client.checkout.updateAttributes = () => Promise.reject(new Error('network'));
-  const r = await o.checkoutFlow(cart, 'Entrance', 'note', () => {});
+  const shown = [];
+  const r = await o.checkoutFlow(cart, 'Entrance', 'note', (kind) => shown.push(kind));
   assert.equal(r, 'error');
   assert.equal(cart.opened, 0);
+  assert.equal(shown[shown.length - 1], 'failed');   // review #4: the guest sees it, not just the console
 });
 
 test('checkoutFlow: empty cart does nothing', async () => {
@@ -352,4 +354,70 @@ test('checkoutFlow: empty cart does nothing', async () => {
   assert.equal(r, 'empty');
   assert.equal(calls.length, 0);
   assert.equal(cart.opened, 0);
+});
+
+
+// --- final review fixes ---
+
+test('isConfigured also needs a valid areaTransport (review #4)', () => {
+  assert.equal(o.isConfigured({ ...FULL, areaTransport: '' }), false);
+  assert.equal(o.isConfigured({ ...FULL, areaTransport: 'line-item' }), false);
+  assert.equal(o.isConfigured({ ...FULL, areaTransport: 'note' }), true);
+  assert.equal(o.decideView('on', '', { ...FULL, areaTransport: '' }), 'fallback');
+  assert.equal(o.decideView('preview', '?preview=order', { ...FULL, areaTransport: '' }), 'not-configured');
+});
+
+function fakeClick(isCheckout) {
+  const ev = { stopped: 0, prevented: 0,
+    target: { closest: (sel) => (isCheckout && sel === o.CHECKOUT_SELECTOR ? {} : null) },
+    stopPropagation() { this.stopped += 1; }, stopImmediatePropagation() { this.stopped += 1; }, preventDefault() { this.prevented += 1; } };
+  return ev;
+}
+
+test('checkoutCapture: takes over a Checkout click before Shopify sees it (review #1)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const ev = fakeClick(true);
+  const shown = [];
+  const r = await o.checkoutCapture(ev, { cart, area: undefined, transport: 'attribute', guard: { failed: false }, show: (k) => shown.push(k) });
+  assert.ok(ev.stopped > 0);
+  assert.ok(ev.prevented > 0);
+  assert.equal(r, 'no-area');
+  assert.deepEqual(shown, ['no-area']);
+  assert.equal(cart.opened, 0);
+});
+
+test('checkoutCapture: ignores clicks that are not on Checkout', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const ev = fakeClick(false);
+  const r = await o.checkoutCapture(ev, { cart, area: 'Outside', transport: 'attribute', guard: { failed: false }, show: () => {} });
+  assert.equal(r, null);
+  assert.equal(ev.stopped, 0);
+  assert.equal(cart.opened, 0);
+});
+
+test('checkoutCapture: after the fallback a Checkout click is swallowed', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  const ev = fakeClick(true);
+  const r = await o.checkoutCapture(ev, { cart, area: 'Outside', transport: 'attribute', guard: { failed: true }, show: () => {} });
+  assert.ok(ev.stopped > 0);
+  assert.equal(r, 'blocked');
+  assert.equal(calls.length, 0);
+  assert.equal(cart.opened, 0);
+});
+
+test('fallback hides any Shopify cart drawer already on the page (review #2)', async () => {
+  const { doc, classes } = fakeDom();
+  await o.init(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: () => Promise.reject(new Error('timeout')), buildShop: never,
+  });
+  assert.equal(classes.has('ordering-failed'), true);
+});
+
+test('an empty Shopify collection counts as a failure and keeps prices (review #3)', async () => {
+  const { els, doc, classes } = fakeDom();
+  const r = await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(0) });
+  assert.equal(r, 'fallback');
+  assert.equal(els.order.attrs['data-state'], 'fallback');
+  assert.equal(classes.has('hide-menu-prices'), false);
 });

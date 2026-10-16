@@ -427,6 +427,7 @@
     .order-area-err { font-size: 0.7rem; color: var(--accent); margin-top: 6px; }
     body.has-order-bar .page { padding-bottom: 96px; }
     body.hide-menu-prices .menu-price { display: none; }
+    body.ordering-failed .shopify-buy-cart-wrapper { display: none !important; } /* never a live cart after the fallback */
     .shopify-buy__cart-toggle { display: none !important; } /* the View order bar is the only way into the cart */
     /* Shopify Buy Button markup (iframe: false, so it takes the site's own styles) */
     .order-products .visuallyhidden, .shopify-buy-cart-wrapper .visuallyhidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -657,7 +658,8 @@
           <button type="button" data-area="Entrance" aria-pressed="false">Ingang<small>Entrance</small></button>
           <button type="button" data-area="Outside" aria-pressed="false">Buiten<small>Outside</small></button>
         </div>
-        <p class="order-area-err" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
+        <p class="order-area-err" data-order-msg="no-area" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
+        <p class="order-area-err" data-order-msg="failed" hidden>Er ging iets mis, bestel aan de balie · Something went wrong, please order at the counter</p>
       </fieldset>
     </template>
 

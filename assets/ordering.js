@@ -9,10 +9,13 @@
   var SDK_URL = 'https://sdks.shopifycdn.com/buy-button/latest/buy-button-storefront.min.js';
   var LOAD_TIMEOUT_MS = 8000;
 
+  var AREA_TRANSPORTS = ['attribute', 'note'];
+
+  // A shop without an agreed area transport counts as not configured: it never shows a cart that can't check out.
   function isConfigured(cfg) {
     return !!cfg && ['domain', 'storefrontAccessToken', 'collectionId'].every(function (k) {
       return typeof cfg[k] === 'string' && cfg[k].trim() !== '';
-    });
+    }) && AREA_TRANSPORTS.indexOf(cfg.areaTransport) !== -1;
   }
 
   function decideView(setting, search, cfg) {
@@ -89,32 +92,43 @@
     });
   }
 
-  // Replaces the cart's own Checkout click: area first, then Shopify's checkout.
-  function checkoutFlow(cart, area, transport, showAreaError) {
+  // Area first, then Shopify's checkout. show(kind) puts a message in the cart: null | 'no-area' | 'failed'.
+  function checkoutFlow(cart, area, transport, show) {
     var blocker = checkoutBlocker(area, cartSummary(cart.model && cart.model.lineItems));
     if (blocker === 'empty') return Promise.resolve('empty');
     if (blocker === 'no-area') {
-      showAreaError(true);
+      show('no-area');
       return Promise.resolve('no-area');
     }
-    showAreaError(false);
+    show(null);
     return sendArea(cart, area, transport).then(function () {
       cart.onCheckout();
       return 'checkout';
     }, function (err) {
       if (typeof console !== 'undefined') console.error('[ordering]', err);
+      show('failed');
       return 'error';
     });
   }
 
-  var MONEY_FORMAT = '%E2%82%AC%7B%7Bamount_with_comma_separator%7D%7D'; // €{{amount_with_comma_separator}}
-  var CHECKOUT_CLICK = 'click .shopify-buy__btn.shopify-buy__btn--cart-checkout';
+  var CHECKOUT_SELECTOR = '.shopify-buy__btn--cart-checkout';
 
-  function shopOptions(doc, sync, onArea, onCheckout) {
+  // Document capture-phase click handler: it runs before any Shopify handler and always stops the click,
+  // so Shopify's own checkout can only be opened through checkoutFlow, whatever the SDK version binds.
+  function checkoutCapture(evt, ctx) {
+    if (!evt.target || !evt.target.closest || !evt.target.closest(CHECKOUT_SELECTOR)) return Promise.resolve(null);
+    evt.preventDefault();
+    evt.stopImmediatePropagation();
+    evt.stopPropagation();
+    if (ctx.guard.failed || !ctx.cart) return Promise.resolve('blocked');
+    return checkoutFlow(ctx.cart, ctx.area, ctx.transport, ctx.show);
+  }
+
+  var MONEY_FORMAT = '%E2%82%AC%7B%7Bamount_with_comma_separator%7D%7D'; // €{{amount_with_comma_separator}}
+  function shopOptions(doc, sync, onArea) {
     var tpl = doc.getElementById('order-area-tpl');
     var events = {};
     events['click [data-area]'] = onArea;
-    events[CHECKOUT_CLICK] = onCheckout;
     return {
       productSet: { iframe: false },
       product: {
@@ -147,9 +161,9 @@
         buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-area') === area));
       }
     }
-    function showAreaError(on) {
-      var errs = doc.querySelectorAll('.shopify-buy__cart .order-area-err');
-      for (var i = 0; i < errs.length; i++) errs[i].hidden = !on;
+    function show(kind) {
+      var msgs = doc.querySelectorAll('.shopify-buy__cart [data-order-msg]');
+      for (var i = 0; i < msgs.length; i++) msgs[i].hidden = msgs[i].getAttribute('data-order-msg') !== kind;
     }
     function sync(c) {
       if (guard.failed) return;
@@ -163,13 +177,11 @@
       if (!isArea(picked)) return;
       area = picked;
       paintArea();
-      showAreaError(false);
+      show(null);
     }
-    function onCheckout(evt) {
-      if (evt && evt.preventDefault) evt.preventDefault();
-      if (guard.failed || !cart) return;
-      checkoutFlow(cart, area, cfg.areaTransport, showAreaError);
-    }
+    doc.addEventListener('click', function (evt) {
+      checkoutCapture(evt, { cart: cart, area: area, transport: cfg.areaTransport, guard: guard, show: show });
+    }, true);
 
     var client = win.ShopifyBuy.buildClient({ domain: cfg.domain, storefrontAccessToken: cfg.storefrontAccessToken });
     return win.ShopifyBuy.UI.onReady(client).then(function (ui) {
@@ -178,15 +190,18 @@
         id: cfg.collectionId,
         node: section.querySelector('[data-order-products]'),
         moneyFormat: MONEY_FORMAT,
-        options: shopOptions(doc, sync, onArea, onCheckout)
+        options: shopOptions(doc, sync, onArea)
       })).then(function () {
         if (guard.failed) return;
+        var count = section.querySelectorAll('.shopify-buy__product').length;
+        if (!count) throw new Error('The Shopify collection showed no products');
         // stopPropagation: Shopify closes the cart on any click outside it, and this button is outside it.
         doc.getElementById('order-bar-btn').addEventListener('click', function (evt) {
           evt.stopPropagation();
           if (!guard.failed) ui.openCart();
         });
         if (ui.components && ui.components.cart && ui.components.cart[0]) sync(ui.components.cart[0]);
+        return count;
       });
     });
   }
@@ -197,6 +212,7 @@
     var products = section.querySelector('[data-order-products]');
     if (products) products.innerHTML = '';
     renderBar(doc, { count: 0, total: 0 });
+    doc.body.classList.toggle('ordering-failed', true);
   }
 
   function init(win, doc, deps) {
@@ -226,7 +242,8 @@
     });
 
     return Promise.race([shop, wait(LOAD_TIMEOUT_MS)])
-      .then(function () {
+      .then(function (count) {
+        if (count === 0) throw new Error('The Shopify collection showed no products');
         section.setAttribute('data-state', 'ready');
         if (shouldHidePrices(win, 'ready')) doc.body.classList.toggle('hide-menu-prices', true);
         return 'ready';
@@ -275,7 +292,9 @@
     checkoutBlocker: checkoutBlocker,
     shouldHidePrices: shouldHidePrices,
     sendArea: sendArea,
-    checkoutFlow: checkoutFlow
+    checkoutFlow: checkoutFlow,
+    CHECKOUT_SELECTOR: CHECKOUT_SELECTOR,
+    checkoutCapture: checkoutCapture
   };
 
   if (typeof module !== 'undefined' && module.exports) {
