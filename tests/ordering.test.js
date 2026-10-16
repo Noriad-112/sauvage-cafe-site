@@ -225,3 +225,51 @@ test('renderBar hides bar for an empty cart', () => {
   assert.equal(els['order-bar'].hidden, true);
   assert.equal(classes.has('has-order-bar'), false);
 });
+
+test('AREAS is exactly Upstairs, Entrance, Outside', () => {
+  assert.deepEqual(o.AREAS.map((a) => a.value), ['Upstairs', 'Entrance', 'Outside']);
+});
+
+test('isArea accepts only the three values', () => {
+  assert.equal(o.isArea('Outside'), true);
+  assert.equal(o.isArea('outside'), false);
+  assert.equal(o.isArea('Kitchen'), false);
+  assert.equal(o.isArea(undefined), false);
+});
+
+test('checkoutBlocker', () => {
+  assert.equal(o.checkoutBlocker('Outside', { count: 0, total: 0 }), 'empty');
+  assert.equal(o.checkoutBlocker(undefined, { count: 2, total: 15 }), 'no-area');
+  assert.equal(o.checkoutBlocker('Garden', { count: 2, total: 15 }), 'no-area');
+  assert.equal(o.checkoutBlocker('Upstairs', { count: 2, total: 15 }), null);
+});
+
+test('shouldHidePrices needs the flag and a loaded Shopify list', () => {
+  assert.equal(o.shouldHidePrices({ SAUVAGE_HIDE_MENU_PRICES: true }, 'ready'), true);
+  assert.equal(o.shouldHidePrices({ SAUVAGE_HIDE_MENU_PRICES: true }, 'fallback'), false);
+  assert.equal(o.shouldHidePrices({ SAUVAGE_HIDE_MENU_PRICES: true }, 'loading'), false);
+  assert.equal(o.shouldHidePrices({ SAUVAGE_HIDE_MENU_PRICES: false }, 'ready'), false);
+  assert.equal(o.shouldHidePrices({ SAUVAGE_HIDE_MENU_PRICES: 'true' }, 'ready'), false);
+  assert.equal(o.shouldHidePrices({}, 'ready'), false);
+});
+
+test('init hides menu prices only after ready with the flag on', async () => {
+  const { doc, classes } = fakeDom();
+  await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve() });
+  assert.equal(classes.has('hide-menu-prices'), true);
+});
+
+test('init keeps menu prices when Shopify fails, even with the flag on', async () => {
+  const { doc, classes } = fakeDom();
+  await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+    { loadScript: () => Promise.reject(new Error('x')), wait: never, buildShop: () => Promise.resolve() });
+  assert.equal(classes.has('hide-menu-prices'), false);
+});
+
+test('init keeps menu prices when the flag is off', async () => {
+  const { doc, classes } = fakeDom();
+  await o.init(fakeWin('on', '', FULL), doc,
+    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve() });
+  assert.equal(classes.has('hide-menu-prices'), false);
+});

@@ -117,6 +117,7 @@
     return Promise.race([shop, wait(LOAD_TIMEOUT_MS)])
       .then(function () {
         section.setAttribute('data-state', 'ready');
+        if (shouldHidePrices(win, 'ready')) doc.body.classList.toggle('hide-menu-prices', true);
         return 'ready';
       })
       .catch(function (err) {
@@ -129,6 +130,26 @@
       });
   }
 
+  var AREAS = [
+    { value: 'Upstairs', nl: 'Boven' },
+    { value: 'Entrance', nl: 'Ingang' },
+    { value: 'Outside', nl: 'Buiten' }
+  ];
+
+  function isArea(v) {
+    return AREAS.some(function (a) { return a.value === v; });
+  }
+
+  function checkoutBlocker(area, summary) {
+    if (!summary || !summary.count) return 'empty';
+    if (!isArea(area)) return 'no-area';
+    return null;
+  }
+
+  function shouldHidePrices(win, state) {
+    return win.SAUVAGE_HIDE_MENU_PRICES === true && state === 'ready';
+  }
+
   var api = {
     SDK_URL: SDK_URL,
     LOAD_TIMEOUT_MS: LOAD_TIMEOUT_MS,
@@ -137,7 +158,11 @@
     cartSummary: cartSummary,
     formatSummary: formatSummary,
     renderBar: renderBar,
-    init: init
+    init: init,
+    AREAS: AREAS,
+    isArea: isArea,
+    checkoutBlocker: checkoutBlocker,
+    shouldHidePrices: shouldHidePrices
   };
 
   if (typeof module !== 'undefined' && module.exports) {
