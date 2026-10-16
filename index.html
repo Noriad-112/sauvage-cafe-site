@@ -421,11 +421,55 @@
     .order-area button { font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.06em; padding: 9px 4px 7px;
       border: 1px solid var(--black); background: var(--white); color: var(--black); cursor: pointer; line-height: 1.1; }
     .order-area button small { display: block; font-family: var(--font-body); font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mid); }
+    .order-area button small { pointer-events: none; }
     .order-area button[aria-pressed="true"] { background: var(--black); color: var(--white); }
     .order-area button[aria-pressed="true"] small { color: var(--grey); }
     .order-area-err { font-size: 0.7rem; color: var(--accent); margin-top: 6px; }
     body.has-order-bar .page { padding-bottom: 96px; }
     body.hide-menu-prices .menu-price { display: none; }
+    .shopify-buy__cart-toggle { display: none !important; } /* the View order bar is the only way into the cart */
+    /* Shopify Buy Button markup (iframe: false, so it takes the site's own styles) */
+    .order-products .visuallyhidden, .shopify-buy-cart-wrapper .visuallyhidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .order-products .shopify-buy__product { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; row-gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--grey); }
+    .order-products .shopify-buy__product:last-child { border-bottom: none; }
+    .order-products .shopify-buy__product__title { grid-column: 1; font-family: var(--font-display); font-weight: 400; font-size: 1.2rem; letter-spacing: 0.04em; line-height: 1.1; margin: 0; }
+    .order-products .shopify-buy__product__price { grid-column: 1; font-family: var(--font-display); font-size: 1rem; color: var(--accent); }
+    .order-products .shopify-buy__product__variant-selectors { grid-column: 1; font-size: 0.7rem; color: var(--mid); }
+    .order-products .shopify-buy__option-select-wrapper { position: relative; display: inline-block; }
+    .order-products .shopify-buy__option-select__select { font: inherit; border: 1px solid var(--grey); background: var(--white); padding: 4px 6px; }
+    .order-products .shopify-buy__select-icon { display: none; }
+    .order-products .shopify-buy__quantity-container, .order-products .shopify-buy__btn-wrapper { grid-column: 2; grid-row: 1 / span 3; }
+    .order-products .shopify-buy__quantity-container { display: none; }
+    .order-products .shopify-buy__btn, .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout {
+      font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.08em; border: 0; border-radius: 0; cursor: pointer; background: var(--black); color: var(--white); padding: 9px 16px 7px; }
+    .order-products .shopify-buy__btn:hover { background: var(--accent); }
+    .order-products .shopify-buy__btn:disabled { background: var(--grey); color: var(--mid); cursor: default; }
+    .shopify-buy-cart-wrapper { position: fixed; top: 0; right: 0; bottom: 0; width: min(88%, 420px); z-index: 60; background: var(--white);
+      box-shadow: -12px 0 30px rgba(0,0,0,0.18); transform: translateX(105%); visibility: hidden; transition: transform 0.25s ease, visibility 0s linear 0.25s; overflow-y: auto; }
+    /* Shopify marks the open cart with is-active (its is-visible class is not reliably removed without its own CSS) */
+    .shopify-buy-cart-wrapper.is-active { transform: none; visibility: visible; transition: transform 0.25s ease, visibility 0s; }
+    @media (prefers-reduced-motion: reduce) { .shopify-buy-cart-wrapper, .shopify-buy-cart-wrapper.is-active { transition: none; } }
+    .shopify-buy-cart-wrapper .shopify-buy__cart { display: flex; flex-direction: column; min-height: 100%; padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom)); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__title { font-family: var(--font-display); font-weight: 400; font-size: 1.8rem; letter-spacing: 0.08em; margin: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__btn--close { background: none; border: 0; font-size: 1.6rem; color: var(--mid); cursor: pointer; width: 40px; height: 40px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-items { list-style: none; margin: 0; padding: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--grey); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__image { display: none; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__title { font-family: var(--font-display); font-size: 1.15rem; letter-spacing: 0.04em; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__variant-title { font-size: 0.65rem; color: var(--mid); grid-column: 1; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__price-and-discounts { grid-column: 2; grid-row: 1; text-align: right; font-family: var(--font-display); color: var(--accent); }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-container { grid-column: 1 / span 2; display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-container .clearfix { display: none; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-decrement, .shopify-buy-cart-wrapper .shopify-buy__quantity-increment {
+      width: 36px; height: 36px; border: 1px solid var(--black); background: var(--white); font-size: 1.1rem; cursor: pointer; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-decrement svg, .shopify-buy-cart-wrapper .shopify-buy__quantity-increment svg { width: 10px; height: 10px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__quantity-input { width: 40px; text-align: center; font: inherit; border: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-empty-text { font-size: 0.85rem; color: var(--mid); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--black); display: grid; grid-template-columns: 1fr auto; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__subtotal__text, .shopify-buy-cart-wrapper .shopify-buy__cart__subtotal__price { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.05em; margin: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__notice { grid-column: 1 / span 2; grid-row: 3; font-size: 0.62rem; color: var(--mid); text-align: center; margin: 6px 0 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout { grid-column: 1 / span 2; width: 100%; margin-top: 12px; font-size: 1.5rem; padding: 14px 0 11px; background: var(--accent); }
   </style>
 </head>
 <body>

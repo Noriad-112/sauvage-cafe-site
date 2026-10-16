@@ -273,3 +273,83 @@ test('init keeps menu prices when the flag is off', async () => {
     { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve() });
   assert.equal(classes.has('hide-menu-prices'), false);
 });
+
+function fakeCart(lineItems) {
+  const calls = [];
+  const cart = {
+    model: { id: 'gid://cart/1', lineItems },
+    props: { client: { checkout: { updateAttributes: (id, input) => { calls.push([id, input]); return Promise.resolve({ id, lineItems, input }); } } } },
+    opened: 0,
+    onCheckout() { this.opened += 1; },
+  };
+  return { cart, calls };
+}
+const ITEMS = [{ quantity: 2, variant: { price: { amount: '5.0' } } }];
+
+test('sendArea attribute: sets cart attribute Area', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  await o.sendArea(cart, 'Outside', 'attribute');
+  assert.deepEqual(calls, [['gid://cart/1', { customAttributes: [{ key: 'Area', value: 'Outside' }] }]]);
+});
+
+test('sendArea note: sets cart note', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  await o.sendArea(cart, 'Upstairs', 'note');
+  assert.deepEqual(calls, [['gid://cart/1', { note: 'Area: Upstairs' }]]);
+});
+
+test('sendArea: empty or unknown transport rejects and sends nothing', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  await assert.rejects(o.sendArea(cart, 'Upstairs', ''));
+  await assert.rejects(o.sendArea(cart, 'Upstairs', 'line-item'));
+  assert.equal(calls.length, 0);
+});
+
+test('sendArea: refuses a value outside the three areas', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  await assert.rejects(o.sendArea(cart, 'Kitchen', 'attribute'));
+  assert.equal(calls.length, 0);
+});
+
+test('checkoutFlow: no area shows the message and does not check out', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  const errs = [];
+  const r = await o.checkoutFlow(cart, undefined, 'attribute', (on) => errs.push(on));
+  assert.equal(r, 'no-area');
+  assert.deepEqual(errs, [true]);
+  assert.equal(calls.length, 0);
+  assert.equal(cart.opened, 0);
+});
+
+test('checkoutFlow: area + transport sends area, then opens checkout', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  const errs = [];
+  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', (on) => errs.push(on));
+  assert.equal(r, 'checkout');
+  assert.equal(calls.length, 1);
+  assert.equal(cart.opened, 1);
+  assert.deepEqual(errs, [false]);
+});
+
+test('checkoutFlow: no transport configured never opens checkout', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const r = await o.checkoutFlow(cart, 'Entrance', '', () => {});
+  assert.equal(r, 'error');
+  assert.equal(cart.opened, 0);
+});
+
+test('checkoutFlow: failed area update never opens checkout', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = () => Promise.reject(new Error('network'));
+  const r = await o.checkoutFlow(cart, 'Entrance', 'note', () => {});
+  assert.equal(r, 'error');
+  assert.equal(cart.opened, 0);
+});
+
+test('checkoutFlow: empty cart does nothing', async () => {
+  const { cart, calls } = fakeCart([]);
+  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', () => {});
+  assert.equal(r, 'empty');
+  assert.equal(calls.length, 0);
+  assert.equal(cart.opened, 0);
+});

@@ -76,8 +76,119 @@
     });
   }
 
-  function buildShop() {
-    return Promise.reject(new Error('buildShop not implemented'));
+  // How the seating area travels inside the Shopify order. Chosen with Ronin via SAUVAGE_SHOPIFY.areaTransport;
+  // anything else rejects, so checkout stays blocked rather than sending an order without an area.
+  function sendArea(cart, area, transport) {
+    if (!isArea(area)) return Promise.reject(new Error('Unknown area: ' + area));
+    var input;
+    if (transport === 'attribute') input = { customAttributes: [{ key: 'Area', value: area }] };
+    else if (transport === 'note') input = { note: 'Area: ' + area };
+    else return Promise.reject(new Error('No area transport configured: ' + transport));
+    return cart.props.client.checkout.updateAttributes(cart.model.id, input).then(function (model) {
+      if (model) cart.model = model;
+    });
+  }
+
+  // Replaces the cart's own Checkout click: area first, then Shopify's checkout.
+  function checkoutFlow(cart, area, transport, showAreaError) {
+    var blocker = checkoutBlocker(area, cartSummary(cart.model && cart.model.lineItems));
+    if (blocker === 'empty') return Promise.resolve('empty');
+    if (blocker === 'no-area') {
+      showAreaError(true);
+      return Promise.resolve('no-area');
+    }
+    showAreaError(false);
+    return sendArea(cart, area, transport).then(function () {
+      cart.onCheckout();
+      return 'checkout';
+    }, function (err) {
+      if (typeof console !== 'undefined') console.error('[ordering]', err);
+      return 'error';
+    });
+  }
+
+  var MONEY_FORMAT = '%E2%82%AC%7B%7Bamount_with_comma_separator%7D%7D'; // €{{amount_with_comma_separator}}
+  var CHECKOUT_CLICK = 'click .shopify-buy__btn.shopify-buy__btn--cart-checkout';
+
+  function shopOptions(doc, sync, onArea, onCheckout) {
+    var tpl = doc.getElementById('order-area-tpl');
+    var events = {};
+    events['click [data-area]'] = onArea;
+    events[CHECKOUT_CLICK] = onCheckout;
+    return {
+      productSet: { iframe: false },
+      product: {
+        iframe: false,
+        layout: 'horizontal',
+        buttonDestination: 'cart',
+        contents: { img: false, title: true, price: true, options: true, quantity: false, button: true, description: false },
+        text: { button: 'Add', outOfStock: 'Uitverkocht · Sold out', unavailable: 'Niet beschikbaar · Unavailable' }
+      },
+      cart: {
+        iframe: false,
+        popup: false,
+        templates: { area: tpl ? tpl.innerHTML : '' },
+        contents: { title: true, area: true, lineItems: true, footer: true, note: false, discounts: false },
+        order: ['title', 'area', 'lineItems', 'footer'],
+        text: { title: 'Your order', total: 'Total', button: 'Checkout', empty: 'Your order is empty.', notice: "We brengen je eten naar je toe · We'll bring your food to you" },
+        events: { afterRender: sync },
+        DOMEvents: events
+      },
+      toggle: { iframe: false }
+    };
+  }
+
+  function buildShop(win, doc, section, cfg, guard) {
+    var area = null;
+    var cart = null;
+    function paintArea() {
+      var buttons = doc.querySelectorAll('[data-area]');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-area') === area));
+      }
+    }
+    function showAreaError(on) {
+      var errs = doc.querySelectorAll('.shopify-buy__cart .order-area-err');
+      for (var i = 0; i < errs.length; i++) errs[i].hidden = !on;
+    }
+    function sync(c) {
+      if (guard.failed) return;
+      if (c) cart = c;
+      paintArea();
+      renderBar(doc, cartSummary(cart && cart.model && cart.model.lineItems));
+    }
+    function onArea(evt, target) {
+      if (guard.failed) return;
+      var picked = target && target.getAttribute('data-area');
+      if (!isArea(picked)) return;
+      area = picked;
+      paintArea();
+      showAreaError(false);
+    }
+    function onCheckout(evt) {
+      if (evt && evt.preventDefault) evt.preventDefault();
+      if (guard.failed || !cart) return;
+      checkoutFlow(cart, area, cfg.areaTransport, showAreaError);
+    }
+
+    var client = win.ShopifyBuy.buildClient({ domain: cfg.domain, storefrontAccessToken: cfg.storefrontAccessToken });
+    return win.ShopifyBuy.UI.onReady(client).then(function (ui) {
+      if (guard.failed) return;
+      return Promise.resolve(ui.createComponent('collection', {
+        id: cfg.collectionId,
+        node: section.querySelector('[data-order-products]'),
+        moneyFormat: MONEY_FORMAT,
+        options: shopOptions(doc, sync, onArea, onCheckout)
+      })).then(function () {
+        if (guard.failed) return;
+        // stopPropagation: Shopify closes the cart on any click outside it, and this button is outside it.
+        doc.getElementById('order-bar-btn').addEventListener('click', function (evt) {
+          evt.stopPropagation();
+          if (!guard.failed) ui.openCart();
+        });
+        if (ui.components && ui.components.cart && ui.components.cart[0]) sync(ui.components.cart[0]);
+      });
+    });
   }
 
   // Final for this page view: clears anything Shopify rendered and hides the bar.
@@ -162,7 +273,9 @@
     AREAS: AREAS,
     isArea: isArea,
     checkoutBlocker: checkoutBlocker,
-    shouldHidePrices: shouldHidePrices
+    shouldHidePrices: shouldHidePrices,
+    sendArea: sendArea,
+    checkoutFlow: checkoutFlow
   };
 
   if (typeof module !== 'undefined' && module.exports) {
