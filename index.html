@@ -394,6 +394,83 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .footer-link:hover { color: var(--white); border-color: var(--white); }
+
+    /* ORDER */
+    .order-section { padding: 24px 22px; border-bottom: 1px solid var(--black); }
+    .order-section[hidden], .order-bar[hidden], .order-area-err[hidden] { display: none; }
+    .order-section .menu-title { margin-bottom: 8px; }
+    .order-service { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin-bottom: 16px; }
+    .order-msg { display: none; font-size: 0.8rem; font-weight: 300; line-height: 1.6; }
+    .order-section[data-state="loading"] .order-msg--loading,
+    .order-section[data-state="fallback"] .order-msg--fallback,
+    .order-section[data-state="not-configured"] .order-msg--not-configured { display: block; }
+    .order-section[data-state="fallback"] .order-products,
+    .order-section[data-state="not-configured"] .order-products,
+    .order-section[data-state="fallback"] .order-service { display: none; }
+    .order-msg--fallback { text-align: center; }
+    .order-msg--fallback strong { display: block; font-family: var(--font-display); font-weight: 400; font-size: 1.4rem; letter-spacing: 0.08em; color: var(--accent); }
+    .order-msg--not-configured { color: var(--mid); font-style: italic; }
+    .order-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--white) 75%, rgba(255,255,255,0)); z-index: 50; }
+    .order-bar-btn { display: block; width: 100%; border: 0; background: var(--accent); color: var(--white);
+      font-family: var(--font-display); font-size: 1.45rem; letter-spacing: 0.1em; padding: 14px 0 11px; cursor: pointer; }
+    .order-bar-btn:focus-visible, .order-area button:focus-visible { outline: 2px solid var(--black); outline-offset: 2px; }
+    .order-area { border: 0; padding: 0; margin: 0 0 14px; }
+    .order-area legend { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin-bottom: 8px; }
+    .order-area-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .order-area button { font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.06em; padding: 9px 4px 7px;
+      border: 1px solid var(--black); background: var(--white); color: var(--black); cursor: pointer; line-height: 1.1; }
+    .order-area button small { display: block; font-family: var(--font-body); font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mid); }
+    .order-area button small { pointer-events: none; }
+    .order-area button[aria-pressed="true"] { background: var(--black); color: var(--white); }
+    .order-area button[aria-pressed="true"] small { color: var(--grey); }
+    .order-area-err { font-size: 0.7rem; color: var(--accent); margin-top: 6px; }
+    body.has-order-bar .page { padding-bottom: 96px; }
+    body.hide-menu-prices .menu-price { display: none; }
+    body.ordering-failed .shopify-buy-cart-wrapper { display: none !important; } /* never a live cart after the fallback */
+    .shopify-buy__cart-toggle { display: none !important; } /* the View order bar is the only way into the cart */
+    /* Shopify Buy Button markup (iframe: false, so it takes the site's own styles) */
+    .order-products .visuallyhidden, .shopify-buy-cart-wrapper .visuallyhidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .order-products .shopify-buy__product { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; row-gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--grey); }
+    .order-products .shopify-buy__product:last-child { border-bottom: none; }
+    .order-products .shopify-buy__product__title { grid-column: 1; font-family: var(--font-display); font-weight: 400; font-size: 1.2rem; letter-spacing: 0.04em; line-height: 1.1; margin: 0; }
+    .order-products .shopify-buy__product__price { grid-column: 1; font-family: var(--font-display); font-size: 1rem; color: var(--accent); }
+    .order-products .shopify-buy__product__variant-selectors { grid-column: 1; font-size: 0.7rem; color: var(--mid); }
+    .order-products .shopify-buy__option-select-wrapper { position: relative; display: inline-block; }
+    .order-products .shopify-buy__option-select__select { font: inherit; border: 1px solid var(--grey); background: var(--white); padding: 4px 6px; }
+    .order-products .shopify-buy__select-icon { display: none; }
+    .order-products .shopify-buy__quantity-container, .order-products .shopify-buy__btn-wrapper { grid-column: 2; grid-row: 1 / span 3; }
+    .order-products .shopify-buy__quantity-container { display: none; }
+    .order-products .shopify-buy__btn, .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout {
+      font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.08em; border: 0; border-radius: 0; cursor: pointer; background: var(--black); color: var(--white); padding: 9px 16px 7px; }
+    .order-products .shopify-buy__btn:hover { background: var(--accent); }
+    .order-products .shopify-buy__btn:disabled { background: var(--grey); color: var(--mid); cursor: default; }
+    .shopify-buy-cart-wrapper { position: fixed; top: 0; right: 0; bottom: 0; width: min(88%, 420px); z-index: 60; background: var(--white);
+      box-shadow: -12px 0 30px rgba(0,0,0,0.18); transform: translateX(105%); visibility: hidden; transition: transform 0.25s ease, visibility 0s linear 0.25s; overflow-y: auto; }
+    /* Shopify marks the open cart with is-active (its is-visible class is not reliably removed without its own CSS) */
+    .shopify-buy-cart-wrapper.is-active { transform: none; visibility: visible; transition: transform 0.25s ease, visibility 0s; }
+    @media (prefers-reduced-motion: reduce) { .shopify-buy-cart-wrapper, .shopify-buy-cart-wrapper.is-active { transition: none; } }
+    .shopify-buy-cart-wrapper .shopify-buy__cart { display: flex; flex-direction: column; min-height: 100%; padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom)); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__title { font-family: var(--font-display); font-weight: 400; font-size: 1.8rem; letter-spacing: 0.08em; margin: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__btn--close { background: none; border: 0; font-size: 1.6rem; color: var(--mid); cursor: pointer; width: 40px; height: 40px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-items { list-style: none; margin: 0; padding: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--grey); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__image { display: none; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__title { font-family: var(--font-display); font-size: 1.15rem; letter-spacing: 0.04em; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__variant-title { font-size: 0.65rem; color: var(--mid); grid-column: 1; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__price-and-discounts { grid-column: 2; grid-row: 1; text-align: right; font-family: var(--font-display); color: var(--accent); }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-container { grid-column: 1 / span 2; display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-container .clearfix { display: none; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-decrement, .shopify-buy-cart-wrapper .shopify-buy__quantity-increment {
+      width: 36px; height: 36px; border: 1px solid var(--black); background: var(--white); font-size: 1.1rem; cursor: pointer; }
+    .shopify-buy-cart-wrapper .shopify-buy__quantity-decrement svg, .shopify-buy-cart-wrapper .shopify-buy__quantity-increment svg { width: 10px; height: 10px; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-item__quantity-input { width: 40px; text-align: center; font: inherit; border: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-empty-text { font-size: 0.85rem; color: var(--mid); }
+    .shopify-buy-cart-wrapper .shopify-buy__cart-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--black); display: grid; grid-template-columns: 1fr auto; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__subtotal__text, .shopify-buy-cart-wrapper .shopify-buy__cart__subtotal__price { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.05em; margin: 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__cart__notice { grid-column: 1 / span 2; grid-row: 3; font-size: 0.62rem; color: var(--mid); text-align: center; margin: 6px 0 0; }
+    .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout { grid-column: 1 / span 2; width: 100%; margin-top: 12px; font-size: 1.5rem; padding: 14px 0 11px; background: var(--accent); }
   </style>
 </head>
 <body>
@@ -422,6 +499,17 @@
       }
     ];
   </script>
+  <script>
+    // QR food ordering. "off" | "preview" | "on". "preview" shows it only at /?preview=order.
+    // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
+    window.SAUVAGE_ORDERING = "preview";
+    // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
+    // Public Storefront values only, never Admin or private keys. areaTransport: decided with Ronin (see README).
+    window.SAUVAGE_SHOPIFY = { domain: "", storefrontAccessToken: "", collectionId: "", areaTransport: "" };
+    // true only after Dorian confirms the live Shopify food list. Prices hide only if Shopify actually loaded.
+    window.SAUVAGE_HIDE_MENU_PRICES = false;
+  </script>
+  <script src="assets/ordering.js" defer></script>
 
   <div class="page">
 
@@ -487,6 +575,16 @@
         </li>`).join('');
     </script>
 
+    <!-- ORDER (QR table ordering, see window.SAUVAGE_ORDERING) -->
+    <section class="order-section" id="order" data-state="loading" aria-labelledby="order-title" hidden>
+      <h2 class="menu-title" id="order-title">Bestel · Order</h2>
+      <p class="order-service">We brengen het naar je toe · We'll bring it to you</p>
+      <p class="order-msg order-msg--loading">Menu laden… · Loading menu…</p>
+      <div class="order-products" data-order-products></div>
+      <p class="order-msg order-msg--fallback"><strong>Bestel aan de balie</strong>Please order at the counter</p>
+      <p class="order-msg order-msg--not-configured">Preview: Shopify is not configured yet.</p>
+    </section>
+
     <!-- DARK BAND -->
     <div class="dark-band">
       <img src="assets/hero-full.jpg" alt="">
@@ -548,6 +646,22 @@
         <a href="https://www.instagram.com/ikinaricoffee/" class="footer-link" target="_blank" rel="noopener noreferrer">Ikinari Coffee</a>
       </nav>
     </footer>
+
+    <div class="order-bar" id="order-bar" hidden>
+      <button type="button" class="order-bar-btn" id="order-bar-btn">View order <span id="order-bar-sum"></span></button>
+    </div>
+    <template id="order-area-tpl">
+      <fieldset class="order-area">
+        <legend>Waar zit je? · Where are you sitting?</legend>
+        <div class="order-area-opts">
+          <button type="button" data-area="Upstairs" aria-pressed="false">Boven<small>Upstairs</small></button>
+          <button type="button" data-area="Entrance" aria-pressed="false">Ingang<small>Entrance</small></button>
+          <button type="button" data-area="Outside" aria-pressed="false">Buiten<small>Outside</small></button>
+        </div>
+        <p class="order-area-err" data-order-msg="no-area" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
+        <p class="order-area-err" data-order-msg="failed" hidden>Er ging iets mis, bestel aan de balie · Something went wrong, please order at the counter</p>
+      </fieldset>
+    </template>
 
   </div>
 
