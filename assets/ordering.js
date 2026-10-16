@@ -50,18 +50,100 @@
     return '· ' + s.count + (s.count === 1 ? ' item' : ' items') + ' · ' + formatEuro(s.total);
   }
 
+  function renderBar(doc, summary) {
+    var bar = doc.getElementById('order-bar');
+    if (!bar) return;
+    var on = summary.count > 0;
+    bar.hidden = !on;
+    doc.getElementById('order-bar-sum').textContent = formatSummary(summary);
+    doc.body.classList.toggle('has-order-bar', on);
+  }
+
+  function loadScript(doc, src) {
+    return new Promise(function (resolve, reject) {
+      var s = doc.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('Could not load ' + src)); };
+      doc.head.appendChild(s);
+    });
+  }
+
+  function timeout(ms) {
+    return new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('Shopify did not respond within ' + ms + 'ms')); }, ms);
+    });
+  }
+
+  function buildShop() {
+    return Promise.reject(new Error('buildShop not implemented'));
+  }
+
+  // Final for this page view: clears anything Shopify rendered and hides the bar.
+  function showFallback(doc, section) {
+    section.setAttribute('data-state', 'fallback');
+    var products = section.querySelector('[data-order-products]');
+    if (products) products.innerHTML = '';
+    renderBar(doc, { count: 0, total: 0 });
+  }
+
+  function init(win, doc, deps) {
+    deps = deps || {};
+    var load = deps.loadScript || function (src) { return loadScript(doc, src); };
+    var wait = deps.wait || timeout;
+    var build = deps.buildShop || buildShop;
+
+    var section = doc.getElementById('order');
+    if (!section) return Promise.resolve('missing');
+
+    var cfg = win.SAUVAGE_SHOPIFY;
+    var view = decideView(win.SAUVAGE_ORDERING, win.location.search, cfg);
+    if (view === 'hidden') return Promise.resolve('hidden');
+
+    section.hidden = false;
+    if (view !== 'load') {
+      section.setAttribute('data-state', view);
+      return Promise.resolve(view);
+    }
+
+    section.setAttribute('data-state', 'loading');
+    var guard = { failed: false };
+    var shop = load(SDK_URL).then(function () {
+      if (guard.failed) throw new Error('Shopify arrived after the timeout; ignored');
+      return build(win, doc, section, cfg, guard);
+    });
+
+    return Promise.race([shop, wait(LOAD_TIMEOUT_MS)])
+      .then(function () {
+        section.setAttribute('data-state', 'ready');
+        return 'ready';
+      })
+      .catch(function (err) {
+        guard.failed = true;
+        showFallback(doc, section);
+        // If the build still finishes later, wipe whatever it rendered again.
+        shop.then(function () { showFallback(doc, section); }, function () {});
+        if (win.SAUVAGE_ORDERING === 'preview' && win.console) win.console.error('[ordering]', err);
+        return 'fallback';
+      });
+  }
+
   var api = {
     SDK_URL: SDK_URL,
     LOAD_TIMEOUT_MS: LOAD_TIMEOUT_MS,
     isConfigured: isConfigured,
     decideView: decideView,
     cartSummary: cartSummary,
-    formatSummary: formatSummary
+    formatSummary: formatSummary,
+    renderBar: renderBar,
+    init: init
   };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {
     root.SauvageOrdering = api;
+    init(root, root.document);
   }
 })(this);
