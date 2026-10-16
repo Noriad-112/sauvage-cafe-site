@@ -394,6 +394,38 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .footer-link:hover { color: var(--white); border-color: var(--white); }
+
+    /* ORDER */
+    .order-section { padding: 24px 22px; border-bottom: 1px solid var(--black); }
+    .order-section[hidden], .order-bar[hidden], .order-area-err[hidden] { display: none; }
+    .order-section .menu-title { margin-bottom: 8px; }
+    .order-service { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin-bottom: 16px; }
+    .order-msg { display: none; font-size: 0.8rem; font-weight: 300; line-height: 1.6; }
+    .order-section[data-state="loading"] .order-msg--loading,
+    .order-section[data-state="fallback"] .order-msg--fallback,
+    .order-section[data-state="not-configured"] .order-msg--not-configured { display: block; }
+    .order-section[data-state="fallback"] .order-products,
+    .order-section[data-state="not-configured"] .order-products,
+    .order-section[data-state="fallback"] .order-service { display: none; }
+    .order-msg--fallback { text-align: center; }
+    .order-msg--fallback strong { display: block; font-family: var(--font-display); font-weight: 400; font-size: 1.4rem; letter-spacing: 0.08em; color: var(--accent); }
+    .order-msg--not-configured { color: var(--mid); font-style: italic; }
+    .order-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--white) 75%, rgba(255,255,255,0)); z-index: 50; }
+    .order-bar-btn { display: block; width: 100%; border: 0; background: var(--accent); color: var(--white);
+      font-family: var(--font-display); font-size: 1.45rem; letter-spacing: 0.1em; padding: 14px 0 11px; cursor: pointer; }
+    .order-bar-btn:focus-visible, .order-area button:focus-visible { outline: 2px solid var(--black); outline-offset: 2px; }
+    .order-area { border: 0; padding: 0; margin: 0 0 14px; }
+    .order-area legend { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin-bottom: 8px; }
+    .order-area-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .order-area button { font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.06em; padding: 9px 4px 7px;
+      border: 1px solid var(--black); background: var(--white); color: var(--black); cursor: pointer; line-height: 1.1; }
+    .order-area button small { display: block; font-family: var(--font-body); font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mid); }
+    .order-area button[aria-pressed="true"] { background: var(--black); color: var(--white); }
+    .order-area button[aria-pressed="true"] small { color: var(--grey); }
+    .order-area-err { font-size: 0.7rem; color: var(--accent); margin-top: 6px; }
+    body.has-order-bar .page { padding-bottom: 96px; }
+    body.hide-menu-prices .menu-price { display: none; }
   </style>
 </head>
 <body>
@@ -422,6 +454,17 @@
       }
     ];
   </script>
+  <script>
+    // QR food ordering. "off" | "preview" | "on". "preview" shows it only at /?preview=order.
+    // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
+    window.SAUVAGE_ORDERING = "preview";
+    // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
+    // Public Storefront values only, never Admin or private keys. areaTransport: decided with Ronin (see README).
+    window.SAUVAGE_SHOPIFY = { domain: "", storefrontAccessToken: "", collectionId: "", areaTransport: "" };
+    // true only after Dorian confirms the live Shopify food list. Prices hide only if Shopify actually loaded.
+    window.SAUVAGE_HIDE_MENU_PRICES = false;
+  </script>
+  <script src="assets/ordering.js" defer></script>
 
   <div class="page">
 
@@ -487,6 +530,16 @@
         </li>`).join('');
     </script>
 
+    <!-- ORDER (QR table ordering, see window.SAUVAGE_ORDERING) -->
+    <section class="order-section" id="order" data-state="loading" aria-labelledby="order-title" hidden>
+      <h2 class="menu-title" id="order-title">Bestel · Order</h2>
+      <p class="order-service">We brengen het naar je toe · We'll bring it to you</p>
+      <p class="order-msg order-msg--loading">Menu laden… · Loading menu…</p>
+      <div class="order-products" data-order-products></div>
+      <p class="order-msg order-msg--fallback"><strong>Bestel aan de balie</strong>Please order at the counter</p>
+      <p class="order-msg order-msg--not-configured">Preview: Shopify is not configured yet.</p>
+    </section>
+
     <!-- DARK BAND -->
     <div class="dark-band">
       <img src="assets/hero-full.jpg" alt="">
@@ -548,6 +601,21 @@
         <a href="https://www.instagram.com/ikinaricoffee/" class="footer-link" target="_blank" rel="noopener noreferrer">Ikinari Coffee</a>
       </nav>
     </footer>
+
+    <div class="order-bar" id="order-bar" hidden>
+      <button type="button" class="order-bar-btn" id="order-bar-btn">View order <span id="order-bar-sum"></span></button>
+    </div>
+    <template id="order-area-tpl">
+      <fieldset class="order-area">
+        <legend>Waar zit je? · Where are you sitting?</legend>
+        <div class="order-area-opts">
+          <button type="button" data-area="Upstairs" aria-pressed="false">Boven<small>Upstairs</small></button>
+          <button type="button" data-area="Entrance" aria-pressed="false">Ingang<small>Entrance</small></button>
+          <button type="button" data-area="Outside" aria-pressed="false">Buiten<small>Outside</small></button>
+        </div>
+        <p class="order-area-err" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
+      </fieldset>
+    </template>
 
   </div>
 
