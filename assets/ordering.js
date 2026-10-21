@@ -8,14 +8,18 @@
 
   var SDK_URL = 'https://sdks.shopifycdn.com/buy-button/latest/buy-button-storefront.min.js';
   var LOAD_TIMEOUT_MS = 8000;
+  var SAVE_TIMEOUT_MS = 10000;
 
-  var AREA_TRANSPORTS = ['attribute', 'note'];
+  function isKey(v) {
+    return typeof v === 'string' && v.trim() !== '';
+  }
 
-  // A shop without an agreed area transport counts as not configured: it never shows a cart that can't check out.
+  // areaKey is the cart attribute that carries the seating area, frozen with Ronin. Without it the shop counts as
+  // not configured, so it never shows a cart that can't check out.
   function isConfigured(cfg) {
-    return !!cfg && ['domain', 'storefrontAccessToken', 'collectionId'].every(function (k) {
-      return typeof cfg[k] === 'string' && cfg[k].trim() !== '';
-    }) && AREA_TRANSPORTS.indexOf(cfg.areaTransport) !== -1;
+    return !!cfg && ['domain', 'storefrontAccessToken', 'collectionId', 'areaKey'].every(function (k) {
+      return isKey(cfg[k]);
+    });
   }
 
   function decideView(setting, search, cfg) {
@@ -79,49 +83,93 @@
     });
   }
 
-  // How the seating area travels inside the Shopify order. Chosen with Ronin via SAUVAGE_SHOPIFY.areaTransport;
-  // anything else rejects, so checkout stays blocked rather than sending an order without an area.
-  function sendArea(cart, area, transport) {
+  function hasAttr(attrs, key, value) {
+    return (attrs || []).some(function (a) { return a && a.key === key && a.value === value; });
+  }
+
+  // Writes the seating area as one cart attribute and resolves only once Shopify returns this same cart with it.
+  // Other attributes on the cart are kept. A thrown SDK error, a missing or wrong answer, or no answer within
+  // timeoutMs all reject, so checkout stays blocked rather than sending an order without an area.
+  function sendArea(cart, area, key, timeoutMs) {
     if (!isArea(area)) return Promise.reject(new Error('Unknown area: ' + area));
-    var input;
-    if (transport === 'attribute') input = { customAttributes: [{ key: 'Area', value: area }] };
-    else if (transport === 'note') input = { note: 'Area: ' + area };
-    else return Promise.reject(new Error('No area transport configured: ' + transport));
-    return cart.props.client.checkout.updateAttributes(cart.model.id, input).then(function (model) {
-      if (model) cart.model = model;
+    if (!isKey(key)) return Promise.reject(new Error('No area key configured'));
+    var id = cart.model.id;
+    var attrs = (cart.model.customAttributes || []).filter(function (a) {
+      return a && a.key !== key;
+    }).map(function (a) {
+      return { key: a.key, value: a.value };
+    });
+    attrs.push({ key: key, value: area });
+    var timer;
+    var save = new Promise(function (resolve) {
+      resolve(cart.props.client.checkout.updateAttributes(id, { customAttributes: attrs }));
+    });
+    var limit = new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error('Shopify did not confirm the area within ' + timeoutMs + 'ms')); }, timeoutMs);
+    });
+    return Promise.race([save, limit]).then(function (model) {
+      clearTimeout(timer);
+      if (!model || model.id !== id || !hasAttr(model.customAttributes, key, area)) {
+        throw new Error('Shopify did not confirm the area on this cart');
+      }
+      cart.model = model;
     });
   }
 
-  // Area first, then Shopify's checkout. show(kind) puts a message in the cart: null | 'no-area' | 'failed'.
-  function checkoutFlow(cart, area, transport, show) {
-    var blocker = checkoutBlocker(area, cartSummary(cart.model && cart.model.lineItems));
-    if (blocker === 'empty') return Promise.resolve('empty');
-    if (blocker === 'no-area') {
-      show('no-area');
-      return Promise.resolve('no-area');
+  // One checkout attempt at a time: area first, then Shopify's checkout. While a save is in flight setBusy(true)
+  // freezes the area buttons and Checkout, and repeat clicks are swallowed. After the save, cart and area are
+  // checked again before the handoff. show(kind) puts a message in the cart: null | 'no-area' | 'changed' | 'failed'.
+  function createCheckout(deps) {
+    var inFlight = false;
+    function blocker(cart) {
+      return checkoutBlocker(deps.getArea(), cartSummary(cart && cart.model && cart.model.lineItems));
     }
-    show(null);
-    return sendArea(cart, area, transport).then(function () {
-      cart.onCheckout();
-      return 'checkout';
-    }, function (err) {
-      if (typeof console !== 'undefined') console.error('[ordering]', err);
-      show('failed');
-      return 'error';
-    });
+    return function attempt() {
+      var cart = deps.getCart();
+      if (deps.guard.failed || !cart) return Promise.resolve('blocked');
+      if (inFlight) return Promise.resolve('busy');
+      var first = blocker(cart);
+      if (first === 'empty') return Promise.resolve('empty');
+      if (first === 'no-area') {
+        deps.show('no-area');
+        return Promise.resolve('no-area');
+      }
+      var area = deps.getArea();
+      inFlight = true;
+      deps.setBusy(true);
+      deps.show(null);
+      return sendArea(cart, area, deps.areaKey, deps.timeoutMs || SAVE_TIMEOUT_MS).then(function () {
+        if (deps.guard.failed || deps.getCart() !== cart) return 'blocked';
+        if (deps.getArea() !== area) {
+          deps.show('changed');
+          return 'changed';
+        }
+        if (blocker(cart) === 'empty') return 'empty';
+        cart.onCheckout();
+        return 'checkout';
+      }).catch(function (err) {
+        if (typeof console !== 'undefined') console.error('[ordering]', err);
+        if (!deps.guard.failed) deps.show('failed');
+        return 'error';
+      }).then(function (result) {
+        inFlight = false;
+        deps.setBusy(false);
+        return result;
+      });
+    };
   }
 
   var CHECKOUT_SELECTOR = '.shopify-buy__btn--cart-checkout';
 
   // Document capture-phase click handler: it runs before any Shopify handler and always stops the click,
-  // so Shopify's own checkout can only be opened through checkoutFlow, whatever the SDK version binds.
+  // so Shopify's own checkout can only be opened through the checkout attempt, whatever the SDK version binds.
   function checkoutCapture(evt, ctx) {
     if (!evt.target || !evt.target.closest || !evt.target.closest(CHECKOUT_SELECTOR)) return Promise.resolve(null);
     evt.preventDefault();
     evt.stopImmediatePropagation();
     evt.stopPropagation();
-    if (ctx.guard.failed || !ctx.cart) return Promise.resolve('blocked');
-    return checkoutFlow(ctx.cart, ctx.area, ctx.transport, ctx.show);
+    if (ctx.guard.failed) return Promise.resolve('blocked');
+    return ctx.attempt();
   }
 
   var MONEY_FORMAT = '%E2%82%AC%7B%7Bamount_with_comma_separator%7D%7D'; // €{{amount_with_comma_separator}}
@@ -155,10 +203,15 @@
   function buildShop(win, doc, section, cfg, guard) {
     var area = null;
     var cart = null;
+    var busy = false;
+    // Also re-applied after every Shopify re-render, which rebuilds the cart's buttons.
     function paintArea() {
-      var buttons = doc.querySelectorAll('[data-area]');
+      var buttons = doc.querySelectorAll('[data-area], ' + CHECKOUT_SELECTOR);
       for (var i = 0; i < buttons.length; i++) {
-        buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-area') === area));
+        var value = buttons[i].getAttribute('data-area');
+        if (value) buttons[i].setAttribute('aria-pressed', String(value === area));
+        buttons[i].disabled = busy;
+        buttons[i].setAttribute('aria-busy', String(busy));
       }
     }
     function show(kind) {
@@ -172,15 +225,23 @@
       renderBar(doc, cartSummary(cart && cart.model && cart.model.lineItems));
     }
     function onArea(evt, target) {
-      if (guard.failed) return;
+      if (guard.failed || busy) return;
       var picked = target && target.getAttribute('data-area');
       if (!isArea(picked)) return;
       area = picked;
       paintArea();
       show(null);
     }
+    var attempt = createCheckout({
+      getCart: function () { return cart; },
+      getArea: function () { return area; },
+      areaKey: cfg.areaKey,
+      show: show,
+      setBusy: function (b) { busy = b; paintArea(); },
+      guard: guard
+    });
     doc.addEventListener('click', function (evt) {
-      checkoutCapture(evt, { cart: cart, area: area, transport: cfg.areaTransport, guard: guard, show: show });
+      checkoutCapture(evt, { guard: guard, attempt: attempt });
     }, true);
 
     var client = win.ShopifyBuy.buildClient({ domain: cfg.domain, storefrontAccessToken: cfg.storefrontAccessToken });
@@ -192,9 +253,9 @@
         moneyFormat: MONEY_FORMAT,
         options: shopOptions(doc, sync, onArea)
       })).then(function () {
+        return waitForProducts(section, guard);
+      }).then(function (count) {
         if (guard.failed) return;
-        var count = section.querySelectorAll('.shopify-buy__product').length;
-        if (!count) throw new Error('The Shopify collection showed no products');
         // stopPropagation: Shopify closes the cart on any click outside it, and this button is outside it.
         doc.getElementById('order-bar-btn').addEventListener('click', function (evt) {
           evt.stopPropagation();
@@ -203,6 +264,19 @@
         if (ui.components && ui.components.cart && ui.components.cart[0]) sync(ui.components.cart[0]);
         return count;
       });
+    });
+  }
+
+  // createComponent returns before Shopify has drawn the products (about 0.4 s later on the demo shop), so wait
+  // for them. An empty collection never resolves and ends in the load timeout's fallback.
+  function waitForProducts(section, guard, everyMs) {
+    return new Promise(function (resolve) {
+      (function check() {
+        if (guard.failed) return resolve(0);
+        var count = section.querySelectorAll('.shopify-buy__product').length;
+        if (count) return resolve(count);
+        setTimeout(check, everyMs || 100);
+      })();
     });
   }
 
@@ -292,7 +366,8 @@
     checkoutBlocker: checkoutBlocker,
     shouldHidePrices: shouldHidePrices,
     sendArea: sendArea,
-    checkoutFlow: checkoutFlow,
+    createCheckout: createCheckout,
+    waitForProducts: waitForProducts,
     CHECKOUT_SELECTOR: CHECKOUT_SELECTOR,
     checkoutCapture: checkoutCapture
   };

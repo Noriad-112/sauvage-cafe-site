@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const o = require('../assets/ordering.js');
 
-const FULL = { domain: 'x.myshopify.com', storefrontAccessToken: 'pub', collectionId: '123', areaTransport: 'attribute' };
-const EMPTY = { domain: '', storefrontAccessToken: '', collectionId: '', areaTransport: '' };
+const FULL = { domain: 'x.myshopify.com', storefrontAccessToken: 'pub', collectionId: '123', areaKey: 'Area' };
+const EMPTY = { domain: '', storefrontAccessToken: '', collectionId: '', areaKey: '' };
 
 test('isConfigured needs all three non-blank values', () => {
   assert.equal(o.isConfigured(FULL), true);
@@ -274,97 +274,238 @@ test('init keeps menu prices when the flag is off', async () => {
   assert.equal(classes.has('hide-menu-prices'), false);
 });
 
-function fakeCart(lineItems) {
+// A fake Buy Button cart whose updateAttributes behaves like Shopify: it returns the same cart with the attributes it got.
+function fakeCart(lineItems, attrs) {
   const calls = [];
   const cart = {
-    model: { id: 'gid://cart/1', lineItems },
-    props: { client: { checkout: { updateAttributes: (id, input) => { calls.push([id, input]); return Promise.resolve({ id, lineItems, input }); } } } },
+    model: { id: 'gid://cart/1', lineItems, customAttributes: attrs || [] },
+    props: { client: { checkout: { updateAttributes: (id, input) => {
+      calls.push([id, input]);
+      return Promise.resolve({ id, lineItems, customAttributes: input.customAttributes });
+    } } } },
     opened: 0,
     onCheckout() { this.opened += 1; },
   };
   return { cart, calls };
 }
 const ITEMS = [{ quantity: 2, variant: { price: { amount: '5.0' } } }];
+const KEY = 'Area';
+const confirmed = (area, lineItems) => ({ id: 'gid://cart/1', lineItems: lineItems || ITEMS, customAttributes: [{ key: 'Area', value: area }] });
 
-test('sendArea attribute: sets cart attribute Area', async () => {
+// A checkout controller over one fake cart; area, guard and what it showed are inspectable.
+function fakeCheckout(cart, opts) {
+  const st = { area: 'Entrance', areaKey: KEY, timeoutMs: 50, shown: [], busy: [], guard: { failed: false }, ...opts };
+  st.attempt = o.createCheckout({
+    getCart: () => cart,
+    getArea: () => st.area,
+    areaKey: st.areaKey,
+    show: (k) => st.shown.push(k),
+    setBusy: (b) => st.busy.push(b),
+    guard: st.guard,
+    timeoutMs: st.timeoutMs,
+  });
+  return st;
+}
+const last = (a) => a[a.length - 1];
+
+test('sendArea: sets the Area cart attribute and confirms it', async () => {
   const { cart, calls } = fakeCart(ITEMS);
-  await o.sendArea(cart, 'Outside', 'attribute');
+  await o.sendArea(cart, 'Outside', KEY, 50);
   assert.deepEqual(calls, [['gid://cart/1', { customAttributes: [{ key: 'Area', value: 'Outside' }] }]]);
+  assert.deepEqual(cart.model.customAttributes, [{ key: 'Area', value: 'Outside' }]);
 });
 
-test('sendArea note: sets cart note', async () => {
-  const { cart, calls } = fakeCart(ITEMS);
-  await o.sendArea(cart, 'Upstairs', 'note');
-  assert.deepEqual(calls, [['gid://cart/1', { note: 'Area: Upstairs' }]]);
+test('sendArea: keeps unrelated cart attributes and replaces an old Area (forge #2)', async () => {
+  const { cart, calls } = fakeCart(ITEMS, [{ key: 'Source', value: 'qr', extra: 1 }, { key: 'Area', value: 'Upstairs' }]);
+  await o.sendArea(cart, 'Outside', KEY, 50);
+  assert.deepEqual(calls[0][1].customAttributes, [{ key: 'Source', value: 'qr' }, { key: 'Area', value: 'Outside' }]);
 });
 
-test('sendArea: empty or unknown transport rejects and sends nothing', async () => {
+test('sendArea: empty area key rejects and sends nothing', async () => {
   const { cart, calls } = fakeCart(ITEMS);
-  await assert.rejects(o.sendArea(cart, 'Upstairs', ''));
-  await assert.rejects(o.sendArea(cart, 'Upstairs', 'line-item'));
+  await assert.rejects(o.sendArea(cart, 'Upstairs', '', 50));
+  await assert.rejects(o.sendArea(cart, 'Upstairs', '  ', 50));
   assert.equal(calls.length, 0);
 });
 
 test('sendArea: refuses a value outside the three areas', async () => {
   const { cart, calls } = fakeCart(ITEMS);
-  await assert.rejects(o.sendArea(cart, 'Kitchen', 'attribute'));
+  await assert.rejects(o.sendArea(cart, 'Kitchen', KEY, 50));
   assert.equal(calls.length, 0);
 });
 
-test('checkoutFlow: no area shows the message and does not check out', async () => {
+test('sendArea: a null result is not a confirmation (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = () => Promise.resolve(null);
+  await assert.rejects(o.sendArea(cart, 'Outside', KEY, 50), /confirm/);
+});
+
+test('sendArea: a result for another cart or without the area is not a confirmation (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = () => Promise.resolve({ id: 'gid://cart/OTHER', customAttributes: [{ key: 'Area', value: 'Outside' }] });
+  await assert.rejects(o.sendArea(cart, 'Outside', KEY, 50), /confirm/);
+  cart.props.client.checkout.updateAttributes = (id) => Promise.resolve({ id, customAttributes: [{ key: 'Area', value: 'Upstairs' }] });
+  await assert.rejects(o.sendArea(cart, 'Outside', KEY, 50), /confirm/);
+  assert.equal(cart.model.customAttributes.length, 0);
+});
+
+test('sendArea: a synchronous SDK error becomes a rejection (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = () => { throw new Error('sdk blew up'); };
+  await assert.rejects(o.sendArea(cart, 'Outside', KEY, 50), /sdk blew up/);
+});
+
+test('sendArea: a save that never answers times out (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = never;
+  await assert.rejects(o.sendArea(cart, 'Outside', KEY, 20), /did not confirm/);
+});
+
+test('checkout: no area shows the message and does not check out', async () => {
   const { cart, calls } = fakeCart(ITEMS);
-  const errs = [];
-  const r = await o.checkoutFlow(cart, undefined, 'attribute', (kind) => errs.push(kind));
-  assert.equal(r, 'no-area');
-  assert.deepEqual(errs, ['no-area']);
+  const st = fakeCheckout(cart, { area: undefined });
+  assert.equal(await st.attempt(), 'no-area');
+  assert.deepEqual(st.shown, ['no-area']);
   assert.equal(calls.length, 0);
   assert.equal(cart.opened, 0);
 });
 
-test('checkoutFlow: area + transport sends area, then opens checkout', async () => {
+test('checkout: area sent and confirmed, then checkout opens once; busy around the save', async () => {
   const { cart, calls } = fakeCart(ITEMS);
-  const errs = [];
-  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', (kind) => errs.push(kind));
-  assert.equal(r, 'checkout');
+  const st = fakeCheckout(cart);
+  assert.equal(await st.attempt(), 'checkout');
   assert.equal(calls.length, 1);
   assert.equal(cart.opened, 1);
-  assert.deepEqual(errs, [null]);
+  assert.deepEqual(st.shown, [null]);
+  assert.deepEqual(st.busy, [true, false]);
 });
 
-test('checkoutFlow: no transport configured never opens checkout', async () => {
+test('checkout: empty area key never opens checkout', async () => {
   const { cart } = fakeCart(ITEMS);
-  const r = await o.checkoutFlow(cart, 'Entrance', '', () => {});
-  assert.equal(r, 'error');
+  const st = fakeCheckout(cart, { areaKey: '' });
+  assert.equal(await st.attempt(), 'error');
   assert.equal(cart.opened, 0);
+  assert.equal(last(st.shown), 'failed');
 });
 
-test('checkoutFlow: failed area update never opens checkout', async () => {
+test('checkout: failed area update never opens checkout and can be retried', async () => {
   const { cart } = fakeCart(ITEMS);
+  const real = cart.props.client.checkout.updateAttributes;
   cart.props.client.checkout.updateAttributes = () => Promise.reject(new Error('network'));
-  const shown = [];
-  const r = await o.checkoutFlow(cart, 'Entrance', 'note', (kind) => shown.push(kind));
-  assert.equal(r, 'error');
+  const st = fakeCheckout(cart);
+  assert.equal(await st.attempt(), 'error');
   assert.equal(cart.opened, 0);
-  assert.equal(shown[shown.length - 1], 'failed');   // review #4: the guest sees it, not just the console
+  assert.equal(last(st.shown), 'failed');
+  cart.props.client.checkout.updateAttributes = real;
+  assert.equal(await st.attempt(), 'checkout');
+  assert.equal(cart.opened, 1);
 });
 
-test('checkoutFlow: empty cart does nothing', async () => {
+test('checkout: null save result shows the error and never opens checkout (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.props.client.checkout.updateAttributes = () => Promise.resolve(null);
+  const st = fakeCheckout(cart);
+  assert.equal(await st.attempt(), 'error');
+  assert.equal(cart.opened, 0);
+  assert.equal(last(st.shown), 'failed');
+  assert.deepEqual(st.busy, [true, false]);
+});
+
+test('checkout: empty cart does nothing', async () => {
   const { cart, calls } = fakeCart([]);
-  const r = await o.checkoutFlow(cart, 'Entrance', 'attribute', () => {});
-  assert.equal(r, 'empty');
+  const st = fakeCheckout(cart);
+  assert.equal(await st.attempt(), 'empty');
   assert.equal(calls.length, 0);
   assert.equal(cart.opened, 0);
+});
+
+test('checkout: repeated clicks while saving make one save and one checkout (forge #1)', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  const d = deferred();
+  cart.props.client.checkout.updateAttributes = (id, input) => { calls.push([id, input]); return d.p; };
+  const st = fakeCheckout(cart);
+  const first = st.attempt();
+  assert.equal(await st.attempt(), 'busy');
+  d.resolve(confirmed('Entrance'));
+  assert.equal(await first, 'checkout');
+  assert.equal(calls.length, 1);
+  assert.equal(cart.opened, 1);
+});
+
+test('checkout: area changed while the save was pending does not open checkout (forge #1)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const d = deferred();
+  cart.props.client.checkout.updateAttributes = () => d.p;
+  const st = fakeCheckout(cart, { area: 'Upstairs' });
+  const run = st.attempt();
+  st.area = 'Outside';
+  d.resolve(confirmed('Upstairs'));
+  assert.equal(await run, 'changed');
+  assert.equal(cart.opened, 0);
+  assert.equal(last(st.shown), 'changed');
+  assert.deepEqual(st.busy, [true, false]);
+});
+
+test('checkout: cart emptied while saving does not open checkout (forge #1)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const d = deferred();
+  cart.props.client.checkout.updateAttributes = () => d.p;
+  const st = fakeCheckout(cart);
+  const run = st.attempt();
+  d.resolve(confirmed('Entrance', []));
+  assert.equal(await run, 'empty');
+  assert.equal(cart.opened, 0);
+});
+
+test('checkout: a save that times out fails, and its late answer never opens checkout (forge #2)', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const d = deferred();
+  cart.props.client.checkout.updateAttributes = () => d.p;
+  const st = fakeCheckout(cart, { timeoutMs: 20 });
+  assert.equal(await st.attempt(), 'error');
+  assert.equal(last(st.shown), 'failed');
+  d.resolve(confirmed('Entrance'));
+  await tick(); await tick();
+  assert.equal(cart.opened, 0);
+});
+
+test('checkout: fallback during the save means checkout never opens', async () => {
+  const { cart } = fakeCart(ITEMS);
+  const d = deferred();
+  cart.props.client.checkout.updateAttributes = () => d.p;
+  const st = fakeCheckout(cart);
+  const run = st.attempt();
+  st.guard.failed = true;
+  d.resolve(confirmed('Entrance'));
+  assert.equal(await run, 'blocked');
+  assert.equal(cart.opened, 0);
+});
+
+test('checkout: after the fallback nothing is sent', async () => {
+  const { cart, calls } = fakeCart(ITEMS);
+  const st = fakeCheckout(cart, { guard: { failed: true } });
+  assert.equal(await st.attempt(), 'blocked');
+  assert.equal(calls.length, 0);
+});
+
+test('checkout: a throwing onCheckout is reported, not left unhandled', async () => {
+  const { cart } = fakeCart(ITEMS);
+  cart.onCheckout = () => { throw new Error('popup blocked'); };
+  const st = fakeCheckout(cart);
+  assert.equal(await st.attempt(), 'error');
+  assert.equal(last(st.shown), 'failed');
+  assert.deepEqual(st.busy, [true, false]);
 });
 
 
 // --- final review fixes ---
 
-test('isConfigured also needs a valid areaTransport (review #4)', () => {
-  assert.equal(o.isConfigured({ ...FULL, areaTransport: '' }), false);
-  assert.equal(o.isConfigured({ ...FULL, areaTransport: 'line-item' }), false);
-  assert.equal(o.isConfigured({ ...FULL, areaTransport: 'note' }), true);
-  assert.equal(o.decideView('on', '', { ...FULL, areaTransport: '' }), 'fallback');
-  assert.equal(o.decideView('preview', '?preview=order', { ...FULL, areaTransport: '' }), 'not-configured');
+test('isConfigured also needs a non-blank areaKey (review #4)', () => {
+  assert.equal(o.isConfigured({ ...FULL, areaKey: '' }), false);
+  assert.equal(o.isConfigured({ ...FULL, areaKey: '  ' }), false);
+  assert.equal(o.isConfigured({ ...FULL, areaKey: undefined }), false);
+  assert.equal(o.decideView('on', '', { ...FULL, areaKey: '' }), 'fallback');
+  assert.equal(o.decideView('preview', '?preview=order', { ...FULL, areaKey: '' }), 'not-configured');
 });
 
 function fakeClick(isCheckout) {
@@ -375,34 +516,31 @@ function fakeClick(isCheckout) {
 }
 
 test('checkoutCapture: takes over a Checkout click before Shopify sees it (review #1)', async () => {
-  const { cart } = fakeCart(ITEMS);
   const ev = fakeClick(true);
-  const shown = [];
-  const r = await o.checkoutCapture(ev, { cart, area: undefined, transport: 'attribute', guard: { failed: false }, show: (k) => shown.push(k) });
+  const attempt = spy(() => Promise.resolve('no-area'));
+  const r = await o.checkoutCapture(ev, { guard: { failed: false }, attempt });
   assert.ok(ev.stopped > 0);
   assert.ok(ev.prevented > 0);
   assert.equal(r, 'no-area');
-  assert.deepEqual(shown, ['no-area']);
-  assert.equal(cart.opened, 0);
+  assert.equal(attempt.calls.length, 1);
 });
 
 test('checkoutCapture: ignores clicks that are not on Checkout', async () => {
-  const { cart } = fakeCart(ITEMS);
   const ev = fakeClick(false);
-  const r = await o.checkoutCapture(ev, { cart, area: 'Outside', transport: 'attribute', guard: { failed: false }, show: () => {} });
+  const attempt = spy(() => Promise.resolve('checkout'));
+  const r = await o.checkoutCapture(ev, { guard: { failed: false }, attempt });
   assert.equal(r, null);
   assert.equal(ev.stopped, 0);
-  assert.equal(cart.opened, 0);
+  assert.equal(attempt.calls.length, 0);
 });
 
 test('checkoutCapture: after the fallback a Checkout click is swallowed', async () => {
-  const { cart, calls } = fakeCart(ITEMS);
   const ev = fakeClick(true);
-  const r = await o.checkoutCapture(ev, { cart, area: 'Outside', transport: 'attribute', guard: { failed: true }, show: () => {} });
+  const attempt = spy(() => Promise.resolve('checkout'));
+  const r = await o.checkoutCapture(ev, { guard: { failed: true }, attempt });
   assert.ok(ev.stopped > 0);
   assert.equal(r, 'blocked');
-  assert.equal(calls.length, 0);
-  assert.equal(cart.opened, 0);
+  assert.equal(attempt.calls.length, 0);
 });
 
 test('fallback hides any Shopify cart drawer already on the page (review #2)', async () => {
@@ -420,4 +558,23 @@ test('an empty Shopify collection counts as a failure and keeps prices (review #
   assert.equal(r, 'fallback');
   assert.equal(els.order.attrs['data-state'], 'fallback');
   assert.equal(classes.has('hide-menu-prices'), false);
+});
+
+// --- browser check 21 Oct: the real Buy Button draws products after createComponent returns ---
+
+function fakeSection(counts) {
+  let n = 0;
+  return { querySelectorAll: (sel) => { assert.equal(sel, '.shopify-buy__product'); return { length: counts[Math.min(n++, counts.length - 1)] }; } };
+}
+
+test('waitForProducts resolves once Shopify has drawn the products', async () => {
+  const count = await o.waitForProducts(fakeSection([0, 0, 0, 9]), { failed: false }, 5);
+  assert.equal(count, 9);
+});
+
+test('waitForProducts stops quietly after the fallback', async () => {
+  const guard = { failed: false };
+  const p = o.waitForProducts(fakeSection([0]), guard, 5);
+  guard.failed = true;
+  assert.equal(await p, 0);
 });

@@ -425,6 +425,7 @@
     .order-area button[aria-pressed="true"] { background: var(--black); color: var(--white); }
     .order-area button[aria-pressed="true"] small { color: var(--grey); }
     .order-area-err { font-size: 0.7rem; color: var(--accent); margin-top: 6px; }
+    .order-area button:disabled, .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout:disabled { opacity: 0.5; cursor: wait; }
     body.has-order-bar .page { padding-bottom: 96px; }
     body.hide-menu-prices .menu-price { display: none; }
     body.ordering-failed .shopify-buy-cart-wrapper { display: none !important; } /* never a live cart after the fallback */
@@ -504,8 +505,8 @@
     // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
     window.SAUVAGE_ORDERING = "preview";
     // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
-    // Public Storefront values only, never Admin or private keys. areaTransport: decided with Ronin (see README).
-    window.SAUVAGE_SHOPIFY = { domain: "", storefrontAccessToken: "", collectionId: "", areaTransport: "" };
+    // Public Storefront values only, never Admin or private keys. areaKey: cart attribute name frozen with Ronin (see README).
+    window.SAUVAGE_SHOPIFY = { domain: "", storefrontAccessToken: "", collectionId: "", areaKey: "" };
     // true only after Dorian confirms the live Shopify food list. Prices hide only if Shopify actually loaded.
     window.SAUVAGE_HIDE_MENU_PRICES = false;
   </script>
@@ -581,7 +582,7 @@
       <p class="order-service">We brengen het naar je toe · We'll bring it to you</p>
       <p class="order-msg order-msg--loading">Menu laden… · Loading menu…</p>
       <div class="order-products" data-order-products></div>
-      <p class="order-msg order-msg--fallback"><strong>Bestel aan de balie</strong>Please order at the counter</p>
+      <p class="order-msg order-msg--fallback"><strong>Bestellen is tijdelijk niet beschikbaar</strong>Bestel bij ons team · Ordering is temporarily unavailable. Please order with our team.</p>
       <p class="order-msg order-msg--not-configured">Preview: Shopify is not configured yet.</p>
     </section>
 
@@ -658,8 +659,9 @@
           <button type="button" data-area="Entrance" aria-pressed="false">Ingang<small>Entrance</small></button>
           <button type="button" data-area="Outside" aria-pressed="false">Buiten<small>Outside</small></button>
         </div>
-        <p class="order-area-err" data-order-msg="no-area" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
-        <p class="order-area-err" data-order-msg="failed" hidden>Er ging iets mis, bestel aan de balie · Something went wrong, please order at the counter</p>
+        <p class="order-area-err" data-order-msg="no-area" role="alert" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
+        <p class="order-area-err" data-order-msg="changed" role="alert" hidden>Je koos een andere plek, tik nog eens op Checkout · You changed where you're sitting, tap Checkout again</p>
+        <p class="order-area-err" data-order-msg="failed" role="alert" hidden>Er ging iets mis. Probeer het opnieuw of bestel bij ons team · Something went wrong. Try again or order with our team</p>
       </fieldset>
     </template>
 
