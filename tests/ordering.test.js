@@ -56,9 +56,9 @@ test('formatSummary is empty for an empty cart', () => {
   assert.equal(o.formatSummary({ count: 0, total: 0 }), '');
 });
 
-test('formatSummary singular, plural, whole euros', () => {
-  assert.equal(o.formatSummary({ count: 1, total: 5 }), '· 1 item · €5');
-  assert.equal(o.formatSummary({ count: 2, total: 15 }), '· 2 items · €15');
+test('formatSummary singular, plural, whole euros with cents like the Shopify cart', () => {
+  assert.equal(o.formatSummary({ count: 1, total: 5 }), '· 1 item · €5,00');
+  assert.equal(o.formatSummary({ count: 2, total: 15 }), '· 2 items · €15,00');
 });
 
 test('formatSummary rounds and uses comma cents', () => {
@@ -214,7 +214,7 @@ test('renderBar shows count and total', () => {
   const { els, doc, classes } = fakeDom();
   o.renderBar(doc, { count: 2, total: 15 });
   assert.equal(els['order-bar'].hidden, false);
-  assert.equal(els['order-bar-sum'].textContent, '· 2 items · €15');
+  assert.equal(els['order-bar-sum'].textContent, '· 2 items · €15,00');
   assert.equal(classes.has('has-order-bar'), true);
 });
 

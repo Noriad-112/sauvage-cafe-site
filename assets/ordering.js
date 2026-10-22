@@ -48,8 +48,7 @@
   }
 
   function formatEuro(n) {
-    var r = Math.round(n * 100) / 100;
-    return '€' + (r % 1 === 0 ? String(r) : r.toFixed(2).replace('.', ','));
+    return '€' + (Math.round(n * 100) / 100).toFixed(2).replace('.', ',');
   }
 
   function formatSummary(s) {
