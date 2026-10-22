@@ -513,10 +513,11 @@
   <script>
     // QR food ordering. "off" | "preview" | "on". "preview" shows it only at /?preview=order.
     // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
-    window.SAUVAGE_ORDERING = "preview";
+    window.SAUVAGE_ORDERING = "on";
+    // TEST BRANCH andre-qr-config-test ONLY: real values for Dorian's preview test order. Never merge; main keeps these EMPTY.
     // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
     // Public Storefront values only, never Admin or private keys. areaKey: cart attribute name frozen with Ronin (see README).
-    window.SAUVAGE_SHOPIFY = { domain: "", storefrontAccessToken: "", collectionId: "", areaKey: "" };
+    window.SAUVAGE_SHOPIFY = { domain: "selection-sauvage-nl.myshopify.com", storefrontAccessToken: "93bab5a2ab79c7e4bea5bec377a7fe60", collectionId: "673689829722", areaKey: "cafe_service_area" };
     // true only after Dorian confirms the live Shopify food list. Prices hide only if Shopify actually loaded.
     window.SAUVAGE_HIDE_MENU_PRICES = false;
   </script>
