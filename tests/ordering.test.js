@@ -1,6 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const o = require('../assets/ordering.js');
+const menuFixture = require('./fixtures/six-product-menu.json');
+const initAtOpen = (win, doc, deps) => o.init(win, doc, {
+  now: () => new Date('2026-10-23T10:00:00Z'), watchHours: () => () => {}, ...deps,
+});
 
 const FULL = { domain: 'x.myshopify.com', storefrontAccessToken: 'pub', collectionId: '123', areaKey: 'Area' };
 const EMPTY = { domain: '', storefrontAccessToken: '', collectionId: '', areaKey: '' };
@@ -9,7 +15,35 @@ test('isConfigured needs all three non-blank values', () => {
   assert.equal(o.isConfigured(FULL), true);
   assert.equal(o.isConfigured(EMPTY), false);
   assert.equal(o.isConfigured(undefined), false);
-  assert.equal(o.isConfigured({ ...FULL, collectionId: '   ' }), false);
+  assert.equal(o.isConfigured({ ...FULL, collectionId: '   ' }), true);
+  assert.equal(o.isConfigured({ ...FULL, collectionId: undefined }), true);
+  for (const key of ['domain', 'storefrontAccessToken', 'areaKey']) {
+    assert.equal(o.isConfigured({ ...FULL, [key]: ' ' }), false);
+  }
+});
+
+test('allowlisted demo fixture keeps pagination-off and unavailable-item fallback behavior', () => {
+  assert.equal(menuFixture.items.length, o.MAX_ALLOWED_PRODUCT_COUNT);
+  assert.equal(o.hasValidProductAllowlist(), true);
+  assert.deepEqual(o.ALLOWED_PRODUCT_GIDS, menuFixture.allowedProductGids);
+  assert.deepEqual(menuFixture.items.filter((item) => !item.addable).map((item) => item.name), ['Arepa', 'Huevos Rancheros']);
+  const options = o.shopOptions({ getElementById: () => null }, () => {}, () => {});
+  assert.deepEqual(options.productSet.contents, { products: true, pagination: false });
+  assert.equal(options.product.text.outOfStock, 'Uitverkocht · Sold out');
+  assert.equal(options.product.text.unavailable, 'Niet beschikbaar · Unavailable');
+  assert.deepEqual(options.cart.order, ['title', 'area', 'lineItems', 'footer']);
+  assert.match(o.ADD_FAILURE_COPY, /niet beschikbaar/);
+  assert.match(o.ADD_FAILURE_COPY, /unavailable/);
+});
+
+test('ProductSet always requests the six approved GIDs, never a same-count substituted GID', () => {
+  const spec = o.productSetSpec({ getElementById: () => null }, {}, () => {}, () => {});
+  assert.equal(menuFixture.sameCountSubstitution.renderedGids.length, o.MAX_ALLOWED_PRODUCT_COUNT);
+  assert.ok(menuFixture.sameCountSubstitution.renderedGids.includes(menuFixture.sameCountSubstitution.substituteGid));
+  assert.equal(spec.id, undefined);
+  assert.deepEqual(spec.storefrontId, menuFixture.allowedProductGids);
+  assert.equal(spec.storefrontId.includes(menuFixture.sameCountSubstitution.substituteGid), false);
+  assert.equal(Object.hasOwn(spec, 'collectionId'), false);
 });
 
 test('decideView: off is always hidden', () => {
@@ -70,6 +104,9 @@ test('formatSummary rounds and uses comma cents', () => {
 function fakeDom() {
   const els = {};
   const products = { innerHTML: 'PRODUCTS' };
+  const addHelp = { textContent: '' };
+  els['order-area-tpl'] = { innerHTML: '<p data-order-add-error role="alert" hidden></p>' };
+  els['order-hours-message'] = { textContent: '' };
   ['order', 'order-bar', 'order-bar-sum', 'order-bar-btn'].forEach((id) => {
     els[id] = {
       id, hidden: true, attrs: {}, textContent: '',
@@ -82,9 +119,10 @@ function fakeDom() {
   const classes = new Set();
   const doc = {
     getElementById: (id) => els[id] || null,
+    querySelectorAll: (selector) => selector === '[data-order-add-help]' ? [addHelp] : [],
     body: { classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)), contains: (c) => classes.has(c) } },
   };
-  return { els, doc, classes, products };
+  return { els, doc, classes, products, addHelp };
 }
 const fakeWin = (setting, search, cfg, extra) => ({
   SAUVAGE_ORDERING: setting, SAUVAGE_SHOPIFY: cfg, location: { search }, console: { error() {} }, ...extra,
@@ -97,7 +135,7 @@ const tick = () => new Promise((r) => setImmediate(r));
 test('init: hidden view leaves section hidden and loads nothing', async () => {
   const { els, doc } = fakeDom();
   const loadScript = spy(() => Promise.resolve());
-  const r = await o.init(fakeWin('preview', '', FULL), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
+  const r = await initAtOpen(fakeWin('preview', '', FULL), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
   assert.equal(r, 'hidden');
   assert.equal(els.order.hidden, true);
   assert.equal(loadScript.calls.length, 0);
@@ -106,14 +144,14 @@ test('init: hidden view leaves section hidden and loads nothing', async () => {
 test('init: off never loads Shopify even with preview param', async () => {
   const { doc } = fakeDom();
   const loadScript = spy(() => Promise.resolve());
-  await o.init(fakeWin('off', '?preview=order', FULL), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
+  await initAtOpen(fakeWin('off', '?preview=order', FULL), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
   assert.equal(loadScript.calls.length, 0);
 });
 
 test('init: preview without config shows note, loads nothing', async () => {
   const { els, doc } = fakeDom();
   const loadScript = spy(() => Promise.resolve());
-  const r = await o.init(fakeWin('preview', '?preview=order', EMPTY), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
+  const r = await initAtOpen(fakeWin('preview', '?preview=order', EMPTY), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
   assert.equal(r, 'not-configured');
   assert.equal(els.order.attrs['data-state'], 'not-configured');
   assert.equal(loadScript.calls.length, 0);
@@ -122,7 +160,7 @@ test('init: preview without config shows note, loads nothing', async () => {
 test('init: on without config shows fallback, loads nothing', async () => {
   const { els, doc } = fakeDom();
   const loadScript = spy(() => Promise.resolve());
-  const r = await o.init(fakeWin('on', '', EMPTY), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
+  const r = await initAtOpen(fakeWin('on', '', EMPTY), doc, { loadScript, wait: never, buildShop: () => Promise.resolve() });
   assert.equal(r, 'fallback');
   assert.equal(els.order.attrs['data-state'], 'fallback');
   assert.equal(loadScript.calls.length, 0);
@@ -130,7 +168,7 @@ test('init: on without config shows fallback, loads nothing', async () => {
 
 test('init: shows loading state while SDK is pending', () => {
   const { els, doc } = fakeDom();
-  o.init(fakeWin('on', '', FULL), doc, { loadScript: never, wait: never, buildShop: () => Promise.resolve() });
+  initAtOpen(fakeWin('on', '', FULL), doc, { loadScript: never, wait: never, buildShop: () => Promise.resolve() });
   assert.equal(els.order.hidden, false);
   assert.equal(els.order.attrs['data-state'], 'loading');
 });
@@ -138,17 +176,29 @@ test('init: shows loading state while SDK is pending', () => {
 test('init: loads SDK URL then builds, ends ready', async () => {
   const { els, doc } = fakeDom();
   const loadScript = spy(() => Promise.resolve());
-  const buildShop = spy(() => Promise.resolve());
-  const r = await o.init(fakeWin('on', '', FULL), doc, { loadScript, wait: never, buildShop });
+  const buildShop = spy(() => Promise.resolve(o.MAX_ALLOWED_PRODUCT_COUNT));
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, { loadScript, wait: never, buildShop });
   assert.equal(r, 'ready');
   assert.deepEqual(loadScript.calls, [[o.SDK_URL]]);
   assert.equal(buildShop.calls[0][3], FULL);
   assert.equal(els.order.attrs['data-state'], 'ready');
 });
 
+test('init fills the bilingual guest help for unavailable or failed-to-add items', async () => {
+  const { doc, addHelp } = fakeDom();
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(o.MAX_ALLOWED_PRODUCT_COUNT),
+  });
+  assert.equal(r, 'ready');
+  assert.equal(addHelp.textContent, o.ADD_FAILURE_COPY);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(/class="order-msg order-msg--availability" data-order-add-help role="status" aria-live="polite"/.test(html));
+  assert.ok(html.includes('.order-section[data-state="ready"] .order-msg--availability,'));
+});
+
 test('init: SDK load error falls back', async () => {
   const { els, doc } = fakeDom();
-  const r = await o.init(fakeWin('on', '', FULL), doc, {
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
     loadScript: () => Promise.reject(new Error('blocked')), wait: never, buildShop: () => Promise.resolve(),
   });
   assert.equal(r, 'fallback');
@@ -157,8 +207,8 @@ test('init: SDK load error falls back', async () => {
 
 test('init: build error falls back', async () => {
   const { doc } = fakeDom();
-  const r = await o.init(fakeWin('on', '', FULL), doc, {
-    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.reject(new Error('bad collection')),
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.reject(new Error('bad ProductSet')),
   });
   assert.equal(r, 'fallback');
 });
@@ -166,7 +216,7 @@ test('init: build error falls back', async () => {
 test('init: falls back when build hangs past the timeout', async () => {
   const { doc } = fakeDom();
   const wait = spy(() => Promise.reject(new Error('timeout')));
-  const r = await o.init(fakeWin('on', '', FULL), doc, { loadScript: () => Promise.resolve(), wait, buildShop: never });
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, { loadScript: () => Promise.resolve(), wait, buildShop: never });
   assert.equal(r, 'fallback');
   assert.deepEqual(wait.calls, [[o.LOAD_TIMEOUT_MS]]);
 });
@@ -175,7 +225,7 @@ test('init: late SDK after timeout is ignored', async () => {
   const { els, doc } = fakeDom();
   const sdk = deferred();
   const buildShop = spy(() => Promise.resolve());
-  const r = await o.init(fakeWin('on', '', FULL), doc, {
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
     loadScript: () => sdk.p, wait: () => Promise.reject(new Error('timeout')), buildShop,
   });
   assert.equal(r, 'fallback');
@@ -190,7 +240,7 @@ test('init: late build after timeout is torn down', async () => {
   const { els, doc, products } = fakeDom();
   const built = deferred();
   let guardSeen;
-  const r = await o.init(fakeWin('on', '', FULL), doc, {
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
     loadScript: () => Promise.resolve(),
     wait: () => new Promise((_, rej) => setImmediate(() => rej(new Error('timeout')))),
     buildShop: (w, d, s, c, guard) => { guardSeen = guard; return built.p; },
@@ -207,7 +257,7 @@ test('init: late build after timeout is torn down', async () => {
 
 test('init: page without the section does nothing', async () => {
   const doc = { getElementById: () => null };
-  assert.equal(await o.init(fakeWin('on', '', FULL), doc, {}), 'missing');
+  assert.equal(await initAtOpen(fakeWin('on', '', FULL), doc, {}), 'missing');
 });
 
 test('renderBar shows count and total', () => {
@@ -255,22 +305,22 @@ test('shouldHidePrices needs the flag and a loaded Shopify list', () => {
 
 test('init hides menu prices only after ready with the flag on', async () => {
   const { doc, classes } = fakeDom();
-  await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
-    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve() });
+  await initAtOpen(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(o.MAX_ALLOWED_PRODUCT_COUNT) });
   assert.equal(classes.has('hide-menu-prices'), true);
 });
 
 test('init keeps menu prices when Shopify fails, even with the flag on', async () => {
   const { doc, classes } = fakeDom();
-  await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+  await initAtOpen(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
     { loadScript: () => Promise.reject(new Error('x')), wait: never, buildShop: () => Promise.resolve() });
   assert.equal(classes.has('hide-menu-prices'), false);
 });
 
 test('init keeps menu prices when the flag is off', async () => {
   const { doc, classes } = fakeDom();
-  await o.init(fakeWin('on', '', FULL), doc,
-    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve() });
+  await initAtOpen(fakeWin('on', '', FULL), doc,
+    { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(o.MAX_ALLOWED_PRODUCT_COUNT) });
   assert.equal(classes.has('hide-menu-prices'), false);
 });
 
@@ -545,16 +595,49 @@ test('checkoutCapture: after the fallback a Checkout click is swallowed', async 
 
 test('fallback hides any Shopify cart drawer already on the page (review #2)', async () => {
   const { doc, classes } = fakeDom();
-  await o.init(fakeWin('on', '', FULL), doc, {
+  await initAtOpen(fakeWin('on', '', FULL), doc, {
     loadScript: () => Promise.resolve(), wait: () => Promise.reject(new Error('timeout')), buildShop: never,
   });
   assert.equal(classes.has('ordering-failed'), true);
 });
 
-test('an empty Shopify collection counts as a failure and keeps prices (review #3)', async () => {
+test('an empty ProductSet counts as a failure and keeps prices (review #3)', async () => {
   const { els, doc, classes } = fakeDom();
-  const r = await o.init(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
+  const r = await initAtOpen(fakeWin('on', '', FULL, { SAUVAGE_HIDE_MENU_PRICES: true }), doc,
     { loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(0) });
+  assert.equal(r, 'fallback');
+  assert.equal(els.order.attrs['data-state'], 'fallback');
+  assert.equal(classes.has('hide-menu-prices'), false);
+});
+
+test('one unpublished item leaves each of the five remaining allowlisted products ready', async () => {
+  const { els, doc } = fakeDom();
+  const rendered = menuFixture.oneUnpublished.renderedGids;
+  assert.equal(rendered.length, o.MAX_ALLOWED_PRODUCT_COUNT - 1);
+  assert.deepEqual(rendered, menuFixture.allowedProductGids.filter((gid) => gid !== menuFixture.oneUnpublished.notRenderedGid));
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(rendered.length),
+  });
+  assert.equal(r, 'ready');
+  assert.equal(els.order.attrs['data-state'], 'ready');
+});
+
+test('all unpublished products resolve to an empty render and use fallback', async () => {
+  const { els, doc } = fakeDom();
+  const rendered = menuFixture.allUnpublished.renderedGids;
+  assert.deepEqual(rendered, []);
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(rendered.length),
+  });
+  assert.equal(r, 'fallback');
+  assert.equal(els.order.attrs['data-state'], 'fallback');
+});
+
+test('an expanded ProductSet fails closed instead of presenting an unexpected item', async () => {
+  const { els, doc, classes } = fakeDom();
+  const r = await initAtOpen(fakeWin('on', '', FULL), doc, {
+    loadScript: () => Promise.resolve(), wait: never, buildShop: () => Promise.resolve(o.MAX_ALLOWED_PRODUCT_COUNT + 1),
+  });
   assert.equal(r, 'fallback');
   assert.equal(els.order.attrs['data-state'], 'fallback');
   assert.equal(classes.has('hide-menu-prices'), false);
@@ -567,9 +650,18 @@ function fakeSection(counts) {
   return { querySelectorAll: (sel) => { assert.equal(sel, '.shopify-buy__product'); return { length: counts[Math.min(n++, counts.length - 1)] }; } };
 }
 
-test('waitForProducts resolves once Shopify has drawn the products', async () => {
-  const count = await o.waitForProducts(fakeSection([0, 0, 0, 9]), { failed: false }, 5);
-  assert.equal(count, 9);
+test('waitForProducts accepts the five still-published allowlisted products', async () => {
+  const count = await o.waitForProducts(fakeSection([0, 0, 0, menuFixture.oneUnpublished.renderedGids.length]), { failed: false }, 5);
+  assert.equal(count, o.MAX_ALLOWED_PRODUCT_COUNT - 1);
+});
+
+test('waitForProducts rejects zero or more cards than the allowlist after fallback', async () => {
+  for (const count of [menuFixture.allUnpublished.renderedGids.length, o.MAX_ALLOWED_PRODUCT_COUNT + 1]) {
+    const guard = { failed: false };
+    const p = o.waitForProducts(fakeSection([count]), guard, 5);
+    guard.failed = true;
+    assert.equal(await p, 0);
+  }
 });
 
 test('waitForProducts stops quietly after the fallback', async () => {
