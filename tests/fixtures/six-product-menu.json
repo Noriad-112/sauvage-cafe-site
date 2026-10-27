@@ -1,0 +1,41 @@
+{
+  "note": "Synthetic fixture based on verified 2026-10-22 product GIDs and the preview report. It contains no cart, customer, credential, or Shopify API data.",
+  "allowedProductGids": [
+    "gid://shopify/Product/10776275517786",
+    "gid://shopify/Product/10406885884250",
+    "gid://shopify/Product/10374553862490",
+    "gid://shopify/Product/10469224448346",
+    "gid://shopify/Product/10374589415770",
+    "gid://shopify/Product/10374530597210"
+  ],
+  "oneUnpublished": {
+    "notRenderedGid": "gid://shopify/Product/10776275517786",
+    "renderedGids": [
+      "gid://shopify/Product/10406885884250",
+      "gid://shopify/Product/10374553862490",
+      "gid://shopify/Product/10469224448346",
+      "gid://shopify/Product/10374589415770",
+      "gid://shopify/Product/10374530597210"
+    ]
+  },
+  "allUnpublished": { "renderedGids": [] },
+  "sameCountSubstitution": {
+    "substituteGid": "gid://shopify/Product/99999999999999",
+    "renderedGids": [
+      "gid://shopify/Product/10776275517786",
+      "gid://shopify/Product/10406885884250",
+      "gid://shopify/Product/10374553862490",
+      "gid://shopify/Product/99999999999999",
+      "gid://shopify/Product/10374589415770",
+      "gid://shopify/Product/10374530597210"
+    ]
+  },
+  "items": [
+    { "name": "Arepa", "productGid": "gid://shopify/Product/10776275517786", "addable": false },
+    { "name": "Granola Bowl", "productGid": "gid://shopify/Product/10406885884250", "addable": true },
+    { "name": "Chilaquiles", "productGid": "gid://shopify/Product/10374553862490", "addable": true },
+    { "name": "Breakfast Burrito", "productGid": "gid://shopify/Product/10469224448346", "addable": true },
+    { "name": "Huevos Rancheros", "productGid": "gid://shopify/Product/10374589415770", "addable": false },
+    { "name": "Eggs Your Way", "productGid": "gid://shopify/Product/10374530597210", "addable": true }
+  ]
+}

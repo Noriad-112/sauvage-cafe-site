@@ -402,9 +402,13 @@
     .order-service { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin-bottom: 16px; }
     .order-msg { display: none; font-size: 0.8rem; font-weight: 300; line-height: 1.6; }
     .order-section[data-state="loading"] .order-msg--loading,
+    .order-section[data-state="ready"] .order-msg--availability,
+    .order-section[data-state="closed"] .order-msg--closed,
     .order-section[data-state="fallback"] .order-msg--fallback,
     .order-section[data-state="not-configured"] .order-msg--not-configured { display: block; }
     .order-section[data-state="fallback"] .order-products,
+    .order-section[data-state="closed"] .order-products,
+    .order-section[data-state="closed"] .order-service,
     .order-section[data-state="not-configured"] .order-products,
     .order-section[data-state="fallback"] .order-service { display: none; }
     .order-msg--fallback { text-align: center; }
@@ -428,7 +432,8 @@
     .order-area button:disabled, .shopify-buy-cart-wrapper .shopify-buy__btn--cart-checkout:disabled { opacity: 0.5; cursor: wait; }
     body.has-order-bar .page { padding-bottom: 96px; }
     body.hide-menu-prices .menu-price { display: none; }
-    body.ordering-failed .shopify-buy-cart-wrapper { display: none !important; } /* never a live cart after the fallback */
+    body.ordering-failed .shopify-buy-cart-wrapper,
+    body.ordering-closed .shopify-buy-cart-wrapper { display: none !important; }
     .shopify-buy__cart-toggle { display: none !important; } /* the View order bar is the only way into the cart */
     /* Shopify Buy Button markup (iframe: false, so it takes the site's own styles) */
     .order-products .visuallyhidden, .shopify-buy-cart-wrapper .visuallyhidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -513,7 +518,7 @@
   <script>
     // QR food ordering. "off" | "preview" | "on". "preview" shows it only at /?preview=order.
     // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
-    window.SAUVAGE_ORDERING = "on";
+    window.SAUVAGE_ORDERING = "off";
     // TEST BRANCH andre-qr-config-test ONLY: real values for Dorian's preview test order. Never merge; main keeps these EMPTY.
     // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
     // Public Storefront values only, never Admin or private keys. areaKey: cart attribute name frozen with Ronin (see README).
@@ -593,6 +598,8 @@
       <p class="order-service">We brengen het naar je toe · We'll bring it to you</p>
       <p class="order-msg order-msg--loading">Menu laden… · Loading menu…</p>
       <div class="order-products" data-order-products></div>
+      <p class="order-msg order-msg--availability" data-order-add-help role="status" aria-live="polite"></p>
+      <p class="order-msg order-msg--closed" id="order-hours-message" role="status">Online bestellen is nu niet beschikbaar. Keuken: wo–zo 09:00–15:00 (Amsterdam). · Online ordering is currently unavailable. Kitchen: Wed–Sun 09:00–15:00 (Amsterdam).</p>
       <p class="order-msg order-msg--fallback"><strong>Table ordering is paused for a moment.</strong>Please order downstairs in the kitchen.</p>
       <p class="order-msg order-msg--not-configured">Preview: Shopify is not configured yet.</p>
     </section>
@@ -673,6 +680,7 @@
         <p class="order-area-err" data-order-msg="no-area" role="alert" hidden>Kies eerst waar je zit · Pick where you're sitting first</p>
         <p class="order-area-err" data-order-msg="changed" role="alert" hidden>Je koos een andere plek, tik nog eens op Checkout · You changed where you're sitting, tap Checkout again</p>
         <p class="order-area-err" data-order-msg="failed" role="alert" hidden>Er ging iets mis. Probeer het opnieuw of bestel bij ons team · Something went wrong. Try again or order with our team</p>
+        <p class="order-area-err" data-order-add-error role="alert" hidden></p>
       </fieldset>
     </template>
 
