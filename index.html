@@ -518,8 +518,9 @@
   <script>
     // QR food ordering. "off" | "preview" | "on". "preview" shows it only at /?preview=order.
     // Emergency rollback is NOT this switch: use Rollback on the last good deployment in Cloudflare Pages.
-    window.SAUVAGE_ORDERING = "off";
-    // TEST BRANCH andre-qr-config-test ONLY: real values for Dorian's preview test order. Never merge; main keeps these EMPTY.
+    // Go-live 12 Nov 2026 (D-70, café only). Ordering ends automatically after Tue 15 Dec 2026 15:00 Amsterdam (café closed after).
+    window.SAUVAGE_ORDERING = Date.now() < Date.parse("2026-12-15T15:00:00+01:00") ? "on" : "off";
+    // LIVE values (public Storefront token only). Set by D-70.
     // Keep EMPTY in the repo. Every branch gets a public preview; real values could take real orders.
     // Public Storefront values only, never Admin or private keys. areaKey: cart attribute name frozen with Ronin (see README).
     window.SAUVAGE_SHOPIFY = { domain: "selection-sauvage-nl.myshopify.com", storefrontAccessToken: "93bab5a2ab79c7e4bea5bec377a7fe60", collectionId: "673689829722", areaKey: "cafe_service_area" };

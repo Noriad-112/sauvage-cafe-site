@@ -291,7 +291,7 @@ test('Add is serialized and does not send a request after kitchen closes', async
 
 test('self-contained HTML includes all feedback targets and ordering switch is off', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(/window\.SAUVAGE_ORDERING = "off"/.test(html));
+  assert.ok(/window\.SAUVAGE_ORDERING = Date\.now\(\) < Date\.parse\("2026-12-15T15:00:00\+01:00"\) \? "on" : "off";/.test(html)) // D-70 go-live with automatic end;
   assert.ok(/data-order-add-help role="status" aria-live="polite"/.test(html));
   const template = html.match(/<template id="order-area-tpl">([\s\S]*?)<\/template>/);
   assert.ok(template && /data-order-add-error role="alert" hidden/.test(template[1]));
